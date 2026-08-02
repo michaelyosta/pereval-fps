@@ -108,6 +108,68 @@ export class ConnectorAwarePlanner {
   }
 }
 
+export class NavigationAgent {
+  constructor(planner) {
+    this.planner = planner;
+    this.route = null;
+    this.currentNodeId = null;
+    this.targetNodeId = null;
+    this.transitionIndex = 0;
+    this.crossingIndex = null;
+  }
+
+  setTarget(currentNodeId, targetNodeId) {
+    if (this.route && this.currentNodeId === currentNodeId && this.targetNodeId === targetNodeId)
+      return this.route;
+    this.currentNodeId = currentNodeId;
+    this.targetNodeId = targetNodeId;
+    this.transitionIndex = 0;
+    this.crossingIndex = null;
+    this.route =
+      currentNodeId && targetNodeId && currentNodeId !== targetNodeId
+        ? (this.planner?.plan(currentNodeId, targetNodeId) ?? null)
+        : null;
+    return this.route;
+  }
+
+  waypoint(currentNodeId, position, radius = 0.85) {
+    if (!this.route) return null;
+    this.currentNodeId = currentNodeId;
+    while (this.transitionIndex < this.route.transitions.length) {
+      const transition = this.route.transitions[this.transitionIndex];
+      if (currentNodeId === transition.to) {
+        this.transitionIndex += 1;
+        this.crossingIndex = null;
+        continue;
+      }
+      if (currentNodeId !== transition.from) return null;
+      if (this.crossingIndex === this.transitionIndex) {
+        return { ...transition.toPosition, phase: 'crossing', transition };
+      }
+      const distance = Math.hypot(
+        position.x - transition.fromPosition.x,
+        position.z - transition.fromPosition.z,
+      );
+      if (distance <= radius) {
+        this.crossingIndex = this.transitionIndex;
+        return { ...transition.toPosition, phase: 'crossing', transition };
+      }
+      return { ...transition.fromPosition, phase: 'exit', transition };
+    }
+    return null;
+  }
+
+  snapshot() {
+    return {
+      currentNodeId: this.currentNodeId,
+      targetNodeId: this.targetNodeId,
+      transitionIndex: this.transitionIndex,
+      crossingIndex: this.crossingIndex,
+      nodes: this.route?.nodes ? [...this.route.nodes] : [],
+    };
+  }
+}
+
 export function connectorRouteIsValid(graph, route) {
   if (!route?.nodes?.length || route.nodes[0] === undefined) return false;
   const planner = new ConnectorAwarePlanner(graph);

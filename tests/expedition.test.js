@@ -20,7 +20,7 @@ import { ItemRegistry, LootContainer } from '../src/expedition/loot.js';
 import { InteractionSystem, Interactable } from '../src/expedition/interactions.js';
 import { EventDirector } from '../src/expedition/events.js';
 import { EncounterDirector } from '../src/expedition/encounters.js';
-import { ConnectorAwarePlanner } from '../src/expedition/navigation.js';
+import { ConnectorAwarePlanner, NavigationAgent } from '../src/expedition/navigation.js';
 import * as THREE from 'three';
 import { ThreeWorldAssembler } from '../src/expedition/threeWorldAssembler.js';
 
@@ -83,6 +83,18 @@ describe('seeded expedition generation', () => {
     expect(
       new ConnectorAwarePlanner(first.graph).next(first.navigation.main, first.graph.startNodeId),
     ).toEqual(first.navigation.main.transitions[0]);
+    const agent = new NavigationAgent(new ConnectorAwarePlanner(first.graph));
+    agent.setTarget(first.graph.startNodeId, first.graph.extractionNodeId);
+    const firstTransition = first.navigation.main.transitions[0];
+    expect(
+      agent.waypoint(first.graph.startNodeId, first.graph.getNode(first.graph.startNodeId).position),
+    ).toMatchObject({ phase: 'exit', x: expect.any(Number), z: expect.any(Number) });
+    expect(agent.waypoint(first.graph.startNodeId, firstTransition.fromPosition)).toMatchObject({
+      phase: 'crossing',
+    });
+    expect(agent.waypoint(firstTransition.to, firstTransition.toPosition)?.phase ?? 'complete').toMatch(
+      /crossing|exit|complete/,
+    );
     expect(new WorldValidator().validate(first).valid).toBe(true);
     expect(first.graph.serialize()).not.toEqual(third.graph.serialize());
     expect(first.generationAttempts).toBeLessThanOrEqual(6);

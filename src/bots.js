@@ -10,6 +10,7 @@ import { applyEnemyDamage } from './core/gameplay.js';
 import { isBlockedByWall, rayCapsuleDistance } from './core/ballistics.js';
 import { resolveCapsuleMotion, pointBlockedByCollider } from './core/collision.js';
 import { getEnemyDefinition } from './data/enemies/index.js';
+import { ConnectorAwarePlanner, NavigationAgent } from './expedition/navigation.js';
 
 // Зависимости приходят через g.services, чтобы боевой, мировой и UI-модули не образовывали цикл.
 let gRef = null;
@@ -390,6 +391,8 @@ function genPatrolPath(b) {
 // ============================================================
 let bots = [];
 let botsGroup = null;
+let navigationGraph = null;
+let navigationPlanner = null;
 
 function createBot(spawnPos, archetype = 'soldier') {
   const definition = getEnemyDefinition(archetype);
@@ -410,6 +413,7 @@ function createBot(spawnPos, archetype = 'soldier') {
     mats: [], parts: {}, muzzleObj: null, headObj: null,
     aim: 0, recoil: 0,
     attackT: 0, chargeT: 0,
+    navigationAgent: null,
   };
   const mesh = createBotMesh(bot, bot.palette);
   mesh.userData.archetype = definition.id;
@@ -638,6 +642,8 @@ export function spawnBots(g, n = 8) {
     if (b.mesh && b.mesh.parent) b.mesh.parent.remove(b.mesh);
   }
   bots = [];
+  navigationGraph = null;
+  navigationPlanner = null;
   const expeditionGroups = g.expedition?.run?.map?.enemyGroups;
   if (expeditionGroups?.length) {
     const groups = g.expedition.encounterDirector?.claimInitialGroups?.(n, {
@@ -748,6 +754,15 @@ export function activateWatcher(g, candidateId) {
   return true;
 }
 
+function getNavigationPlanner(g) {
+  const graph = g.expedition?.run?.map?.graph ?? null;
+  if (graph !== navigationGraph) {
+    navigationGraph = graph;
+    navigationPlanner = graph ? new ConnectorAwarePlanner(graph) : null;
+  }
+  return navigationPlanner;
+}
+
 // ============================================================
 //  ВРЕМЕННЫЕ ОБЪЕКТЫ (один набор на модуль, без new в update)
 // ============================================================
@@ -798,6 +813,7 @@ function hasLOS(b, ppos) {
 
 function updatePatrol(b, dt) {
   if (b.pauseT > 0) { b.pauseT -= dt; b.moving = false; return; }
+  if (gRef?.expedition && updateNavigationPatrol(b, dt)) return;
   const path = b.patrolPath;
   if (!path.length) { b.moving = false; return; }
   const wp = path[b.patrolWp % path.length];
@@ -819,6 +835,41 @@ function updatePatrol(b, dt) {
     b.pauseT = 0.25;
     b.moving = false;
   }
+}
+
+function updateNavigationPatrol(b, dt) {
+  const manager = gRef?.expedition;
+  const planner = getNavigationPlanner(gRef);
+  if (!manager?.run || !planner) return false;
+  const playerNodeId = manager.nodeForPosition({ x: gRef.player.pos.x, z: gRef.player.pos.z });
+  const currentNodeId = manager.nodeForPosition({ x: b.mesh.position.x, z: b.mesh.position.z }) ?? b.expeditionNodeId;
+  if (!playerNodeId || !currentNodeId || playerNodeId === currentNodeId) {
+    b.navigationAgent = null;
+    return false;
+  }
+  if (!b.navigationAgent) b.navigationAgent = new NavigationAgent(planner);
+  b.navigationAgent.setTarget(currentNodeId, playerNodeId);
+  const waypoint = b.navigationAgent.waypoint(
+    currentNodeId,
+    { x: b.mesh.position.x, z: b.mesh.position.z },
+    0.85,
+  );
+  if (!waypoint) {
+    b.navigationAgent = null;
+    return false;
+  }
+  _v1.set(waypoint.x - b.mesh.position.x, 0, waypoint.z - b.mesh.position.z);
+  const distance = _v1.length();
+  if (distance <= 0.05) {
+    b.moving = false;
+    return true;
+  }
+  _v1.multiplyScalar(1 / distance);
+  turnToward(b, Math.atan2(_v1.x, _v1.z), 5, dt);
+  const ok = moveBot(b, _v1.x * b.speed, _v1.z * b.speed, dt);
+  b.moving = ok;
+  if (!ok) b.navigationAgent = null;
+  return true;
 }
 
 function updateStalkerAttack(b, dt, ppos, dist) {

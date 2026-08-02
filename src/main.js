@@ -185,6 +185,8 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
       archetype: bot.archetype,
       alive: bot.alive,
       groupId: bot.expeditionGroupId ?? null,
+      nodeId: bot.expeditionNodeId ?? null,
+      navigation: bot.navigationAgent?.snapshot?.() ?? null,
     })) ?? [],
     recordNoise: (options = {}) => g.expedition?.recordNoise?.({
       ...options,

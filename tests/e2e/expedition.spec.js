@@ -89,6 +89,9 @@ test('spawns a safe deterministic mid-run encounter after pressure rises', async
 
   const initialBots = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getBotState?.());
   expect(initialBots?.length).toBeGreaterThan(0);
+  await page.waitForTimeout(500);
+  const navigatingBots = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getBotState?.());
+  expect(navigatingBots?.some((bot) => (bot.navigation?.nodes?.length ?? 0) > 1)).toBe(true);
   for (let index = 0; index < 3; index += 1)
     await page.evaluate(() => window.__PEREVAL_DEBUG__?.killNearestEnemy?.());
   await page.evaluate(() => {
