@@ -148,9 +148,20 @@ export function init(_g) {
     weaponName: $('#weapon-name'), reloadHint: $('#reload-hint'),
     crosshair: $('#crosshair'), hitmarker: $('#hitmarker'),
     damageVig: $('#damage-vig'), body: document.body,
-    healthFill: $('#health-fill'), debug: $('#debug-panel')
+    healthFill: $('#health-fill'), debug: $('#debug-panel'), runSeed: $('#run-seed'), copySeed: $('#copy-seed')
   };
   hud.weaponName.textContent = g.state.weaponName;
+  if (hud.runSeed) hud.runSeed.textContent = g.runSeed ?? '—';
+  document.body.classList.toggle('expedition-mode', !!g.expedition);
+  hud.copySeed?.addEventListener('click', async () => {
+    try {
+      await window.navigator?.clipboard?.writeText(g.runSeed ?? '');
+      hud.copySeed.textContent = 'Скопировано';
+      setTimeout(() => { hud.copySeed.textContent = 'Скопировать seed'; }, 900);
+    } catch {
+      // Clipboard access is optional in local and headless browsers.
+    }
+  });
   const quality = $('#quality');
   if (quality) quality.value = g.quality;
 
@@ -205,12 +216,24 @@ export function update(dt, _g) {
     $('#debug-lock').textContent = document.pointerLockElement ? 'locked' : (g.noLock ? 'fallback' : 'free');
     $('#debug-pos').textContent = `${g.player.pos.x.toFixed(1)}, ${g.player.pos.y.toFixed(1)}, ${g.player.pos.z.toFixed(1)}`;
     $('#debug-weapon').textContent = g.state.reloading ? 'reloading' : g.state.alive ? 'ready' : 'dead';
+    if (g.expedition) {
+      const run = g.expedition.run;
+      $('#debug-seed').textContent = g.runSeed ?? '—';
+      $('#debug-run-state').textContent = g.expedition.state;
+      $('#debug-threat').textContent = String(Math.round(run?.threat ?? 0));
+      $('#debug-module').textContent = run?.map?.objective?.steps?.[run.objective.currentStep]?.nodeId ?? '—';
+    }
   }
 
   // kills
   hud.kills.textContent = g.state.kills;
   const target = $('#target-progress');
-  if (target) target.textContent = `${g.state.kills} / ${g.state.matchTarget}`;
+  if (target) {
+    const objective = g.expedition?.run?.objective;
+    target.textContent = objective
+      ? `${Math.min(objective.currentStep, objective.steps.length)} / ${objective.steps.length}`
+      : `${g.state.kills} / ${g.state.matchTarget}`;
+  }
 
   // здоровье
   if (hud.healthFill) {

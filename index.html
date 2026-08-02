@@ -31,6 +31,10 @@
   #score b{ font-size:26px; display:block; font-weight:700; color:#fff; margin-top:2px; }
   #objective{ color:#b9b4a8; font-size:11px; letter-spacing:2px; margin-top:12px; text-transform:uppercase; text-shadow:0 1px 3px rgba(0,0,0,.9); }
   #objective b{ color:#f0d09b; font-size:13px; }
+  #run-seed-box{ color:#9b9a94; font-size:10px; letter-spacing:1px; margin-top:8px; }
+  #run-seed{ color:#e6d3a9; font-family:monospace; }
+  #copy-seed{ margin-left:7px; border:1px solid rgba(255,255,255,.16); background:rgba(10,12,16,.45); color:#d9d5ca; cursor:pointer; font-size:10px; }
+  body:not(.expedition-mode) #run-seed-box{ display:none; }
   #killfeed{ position:absolute; top:18px; right:22px; display:flex; flex-direction:column; gap:5px; align-items:flex-end; }
   .kf-entry{ background:rgba(10,12,16,.55); border-left:2px solid rgba(255,180,60,.85); padding:4px 10px;
     font-size:12.5px; letter-spacing:1px; color:#ddd; text-shadow:0 1px 2px #000; animation:kf-in .18s ease-out; }
@@ -122,6 +126,8 @@
     padding:7px 10px; background:rgba(8,10,14,.72); border:1px solid rgba(100,220,205,.24); color:#a9d9d2;
     font:11px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.2px; pointer-events:none; white-space:nowrap; }
   body.debug #debug-panel{ display:block; }
+  #debug-expedition{ display:none; position:fixed; left:50%; bottom:34px; transform:translateX(-50%); z-index:40; color:#d9d5ca; font:11px monospace; }
+  body.debug.expedition-mode #debug-expedition{ display:block; }
 
   /* ---- victory ---- */
   #victory{ position:fixed; inset:0; z-index:36; display:none; align-items:center; justify-content:center; text-align:center;
@@ -141,6 +147,14 @@
     #ammobox{ right:16px; bottom:14px; }
     #healthbox{ left:16px; bottom:14px; width:170px; }
   }
+  #expedition-results{ position:fixed; inset:0; z-index:37; display:none; align-items:center; justify-content:center; text-align:center;
+    background:radial-gradient(circle at 50% 35%,rgba(38,66,61,.5),rgba(4,8,11,.93) 70%); }
+  .expedition-results-panel{ width:min(520px,calc(100vw - 40px)); padding:34px; border:1px solid rgba(240,189,101,.36); background:rgba(10,15,18,.9); }
+  .expedition-results-panel h2{ margin:8px 0 22px; color:#f2ede2; font-size:34px; letter-spacing:5px; }
+  .expedition-result-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px; color:#a7b5b2; font-size:10px; letter-spacing:1px; text-transform:uppercase; }
+  .expedition-result-grid b{ display:block; color:#fff; font-size:18px; margin-top:5px; }
+  .expedition-result-actions{ display:grid; gap:8px; }
+  .expedition-result-actions button{ border:1px solid rgba(240,189,101,.35); background:rgba(240,189,101,.12); color:#f7ecd9; padding:10px; cursor:pointer; }
 
   /* ---- error overlay (dev) ---- */
   #err{ position:fixed; left:8px; bottom:8px; z-index:99; color:#ff6b5e; font:12px/1.5 monospace; background:rgba(0,0,0,.7);
@@ -153,6 +167,7 @@
   <div id="hud">
     <div id="topbar"><div id="score">УБИЙСТВА<b id="kills">0</b><div id="objective">ЦЕЛЬ: <b id="target-progress">0 / 5</b></div></div></div>
     <div id="killfeed"></div>
+    <div id="run-seed-box">SEED <span id="run-seed">—</span><button id="copy-seed" type="button">Скопировать seed</button></div>
     <div id="crosshair">
       <div class="ch-line ch-t"></div><div class="ch-line ch-b"></div>
       <div class="ch-line ch-l"></div><div class="ch-line ch-r"></div>
@@ -205,6 +220,21 @@
       <button id="victory-restart" type="button">Начать заново</button>
     </div>
   </div>
+  <div id="expedition-results" role="dialog" aria-modal="true" aria-labelledby="expedition-results-title">
+    <div class="expedition-results-panel">
+      <div class="victory-kicker">EXPEDITION RESULT</div>
+      <h2 id="expedition-results-title">RUN COMPLETE</h2>
+      <div class="expedition-result-grid">
+        <div>Status<b id="expedition-result-status">—</b></div>
+        <div>Seed<b id="expedition-result-seed">—</b></div>
+        <div>Kills<b id="expedition-result-kills">0</b></div>
+      </div>
+      <div class="expedition-result-actions">
+        <button id="expedition-copy-seed" type="button">Copy seed</button>
+        <button id="expedition-next" type="button">Start next expedition</button>
+      </div>
+    </div>
+  </div>
   <div id="death">
     <div>
       <div class="d-title">ВЫ УБИТЫ</div>
@@ -212,6 +242,7 @@
     </div>
   </div>
   <div id="err"></div>
+  <div id="debug-expedition">seed <span id="debug-seed">—</span> · state <span id="debug-run-state">Boot</span> · threat <span id="debug-threat">0</span> · module <span id="debug-module">—</span></div>
   <div id="debug-panel">FPS <span id="debug-fps">0</span> · frame <span id="debug-frame">0</span>ms · calls <span id="debug-calls">0</span> · tris <span id="debug-triangles">0</span> · spread <span id="debug-spread">0</span> · recoil <span id="debug-recoil">0</span> · pos <span id="debug-pos">0,0,0</span> · weapon <span id="debug-weapon">ready</span> · lock <span id="debug-lock">free</span></div>
 <script type="module" src="/src/main.js?v=20260803"></script>
 </body>

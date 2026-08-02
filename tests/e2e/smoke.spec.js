@@ -10,7 +10,7 @@ test('boots without page errors and supports combat/pause flow', async ({ page }
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
 
-  await page.goto('/?debug=1');
+  await page.goto('/?mode=arena&debug=1');
   await expect(page.locator('canvas')).toHaveCount(1);
   await expect(page.locator('#title')).toBeVisible();
   await page.screenshot({ path: 'docs/qa/iteration-01/start.png' });
@@ -75,7 +75,7 @@ test('demo mode renders the deterministic presentation scene', async ({ page }) 
     if (message.type() === 'error') consoleErrors.push(message.text());
   });
 
-  await page.goto('/?demo=1&debug=1');
+  await page.goto('/?mode=arena&demo=1&debug=1');
   await expect(page.locator('canvas')).toHaveCount(1);
   await page.waitForTimeout(1500);
   await page.screenshot({ path: 'docs/qa/iteration-01/demo.png' });

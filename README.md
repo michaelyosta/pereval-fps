@@ -22,7 +22,9 @@ Open `http://127.0.0.1:5173/`.
 
 Useful routes:
 
-- `/?demo=1` — cinematic camera and safe presentation scene.
+- `/?mode=expedition&seed=12345` — seeded expedition (the default mode).
+- `/?mode=arena` — preserved five-kill legacy arena for combat regression.
+- `/?mode=arena&demo=1` — cinematic camera and safe presentation scene.
 - `/?debug=1` — compact FPS, frame time, renderer counters, weapon, spread, recoil, and player position overlay.
 - `/?quality=Low|Medium|High|Ultra` — select a render preset without changing gameplay.
 
@@ -54,7 +56,7 @@ If Pointer Lock is unavailable, the game falls back to a normal mouse mode inste
 - Enemy shots use a vertical capsule player hit volume, line-of-sight, nearest-wall blocking, movement/distance penalties, and burst timing.
 - Player shots validate the muzzle-to-impact segment so the weapon cannot shoot through nearby cover.
 - Player and bot movement share height-aware capsule collision with oriented world boxes and a small step offset.
-- The match objective is five kills; the victory screen reports kills, accuracy, and time.
+- Arena ends after five kills; expedition kills are statistics and do not end a run. Expedition success requires objective completion and a completed extraction.
 
 ## Architecture
 
@@ -69,6 +71,8 @@ src/core/gameplay.js     pure health, kill, reload, respawn, and time rules
 src/core/ballistics.js   capsule ray tests and wall blocking
 src/core/collision.js    height-aware oriented-box capsule resolver
 src/config/graphics.js   Low/Medium/High/Ultra render presets
+src/core/expedition/     seeded RNG, run lifecycle, campaign contracts
+src/expedition/          authored modules, graph generation, objectives, extraction, inventory, noise, threat
 ```
 
 Modules receive the shared service object through `g.services`; there is no `window.g`, dynamic import cycle, or UI callback overwrite.
@@ -83,9 +87,9 @@ npm run test:e2e         # Chromium smoke: boot, fire, pause, damage, kill, demo
 npm run benchmark        # writes docs/qa/final/benchmark.json and demo.png
 ```
 
-The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.01 FPS, 496.35 ms sampled frame time, 831 draw calls, 11,467 triangles, 24 resources, and 2.54 MB encoded resource bytes. The in-app visual QA overlay measured approximately 60 FPS at 1280×720. These are different environments, so neither is presented as a universal hardware claim.
+The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 3.00 FPS, 333.26 ms sampled frame time, 833 draw calls, 11,659 triangles, 37 resources, and 2.96 MB encoded resource bytes. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
 
-The build currently emits one main JavaScript chunk of about 580.53 kB minified and 153.47 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
+The build currently emits one main JavaScript chunk of about 629.91 kB minified and 169.30 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
 
 `npm audit --omit=dev --audit-level=high` is clean. The full development-tool audit currently reports five transitive Vite/Vitest/esbuild advisories; the available `npm audit fix --force` is a breaking upgrade, so it is intentionally not applied in this gameplay pass.
 
@@ -95,9 +99,17 @@ The runtime uses local CanvasTexture materials. Color maps are tagged `THREE.SRG
 
 ## Scope and limitations
 
-This remains a compact prototype rather than a production multiplayer/AAA stack. There is no networking, content streaming, skeletal animation pipeline, baked lightmap, or external PBR asset library. Procedural details still use unseeded randomness, so screenshots can vary slightly between cold starts. Headless browser performance is software-dependent; use the in-app debug overlay or a real browser on the target GPU for hardware decisions.
+The expedition foundation is a compact vertical slice rather than a production multiplayer/AAA stack. There is no networking, content streaming, skeletal animation pipeline, baked lightmap, or external PBR asset library. The authored expedition graph, objective data, extraction points, loot placements, events, and skill rewards are deterministic by seed; legacy arena decoration remains a separate compatibility path. Headless browser performance is software-dependent; use the in-app debug overlay or a real browser on the target GPU for hardware decisions.
 
 See [AUDIT.md](AUDIT.md) for the original defect inventory and [docs/qa/final/REPORT.md](docs/qa/final/REPORT.md) for the final verification record.
+
+## Expedition foundation
+
+The expedition route owns a single `RunManager` state machine:
+
+`Boot → MainMenu → Hideout → Loadout → GeneratingRun → Deploying → Exploration → ObjectiveActive → ExtractionAvailable → Extracting → Results`.
+
+`?seed=` is preserved in the `RunConfig`, generated graph, objective, extraction points, loot containers, events, enemy groups, temporary skill rewards, debug overlay, and results data. `?mode=arena` remains the explicit legacy regression route. Temporary skills are run-scoped; campaign unlocks and stash data are versioned through `SaveSystem`.
 
 ## License
 

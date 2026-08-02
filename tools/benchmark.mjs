@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = 4174;
-const url = `http://127.0.0.1:${port}/?demo=1&debug=1`;
+const url = `http://127.0.0.1:${port}/?mode=arena&demo=1&debug=1`;
 const command = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const server = spawn(command, ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)], {
   cwd: root,

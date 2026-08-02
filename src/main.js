@@ -16,10 +16,16 @@ import * as combatModule from './combat.js';
 import * as botsModule from './bots.js';
 import * as uiModule from './ui.js';
 import { getQualityPreset, QUALITY_PRESETS } from './config/graphics.js';
+import { RunManager } from './core/expedition/RunManager.js';
+import { ThreeWorldAssembler } from './expedition/threeWorldAssembler.js';
 
 const $ = (s) => document.querySelector(s);
 const PARAMS = new URLSearchParams(location.search);
 const DEMO = PARAMS.has('demo');
+const MODE = PARAMS.get('mode') || (DEMO ? 'arena' : 'expedition');
+const LEGACY_ARENA = MODE === 'arena';
+const EXPEDITION = !LEGACY_ARENA;
+const RUN_SEED = PARAMS.get('seed') || 'default';
 if (PARAMS.has('debug')) document.body.classList.add('debug');
 
 // ---------- ошибки на экран (для отладки) ----------
@@ -89,12 +95,17 @@ const mods = { world: worldModule, combat: combatModule, bots: botsModule, ui: u
 const g = {
   renderer, scene, camera, composer, viewRoot,
   demo: DEMO,
+  mode: MODE,
+  expedition: EXPEDITION ? new RunManager() : null,
+  expeditionAssembler: EXPEDITION ? new ThreeWorldAssembler(scene) : null,
+  expeditionScene: null,
+  runSeed: RUN_SEED,
   sessionStarted: false,
   noLock: false,          // fallback: игра без захвата мыши (если pointer lock недоступен)
   clock: new THREE.Clock(),
   input: {
     forward: 0, strafe: 0, sprint: false, fire: false, ads: false,
-    reload: false, jump: false, lookDX: 0, lookDY: 0
+    reload: false, jump: false, interact: false, lookDX: 0, lookDY: 0
   },
   settings: { sensitivity: 0.0022, invertY: false },
   state: {
@@ -139,6 +150,15 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
       points: renderer.info.render.points,
       lines: renderer.info.render.lines
     }),
+    getRunState: () => g.expedition?.snapshot?.() ?? null,
+    completeObjective: () => g.expedition?.completeObjective?.() ?? null,
+    startExtraction: () => {
+      if (!g.expedition) return null;
+      g.expedition.activateExtraction();
+      return g.expedition.snapshot();
+    },
+    tickExtraction: (seconds = 1, inside = true) => g.expedition?.tickExtraction?.(seconds, inside) ?? false,
+    copySeed: () => window.navigator?.clipboard?.writeText(g.runSeed),
     shoot: () => mods.combat?.shoot(g, null),
     damagePlayer: (amount = 10) => g.damagePlayer(amount, { type: 'debug' }),
     killNearestEnemy: () => {
@@ -164,12 +184,14 @@ window.addEventListener('keydown', (e) => {
   }
   keys.add(e.code);
   if (e.code === 'KeyR') g.input.reload = true;
+  if (e.code === 'KeyE') g.input.interact = true;
   if (e.code === 'Space' && !g.demo) g.input.jump = true;
 });
 window.addEventListener('keyup', (e) => {
   keys.delete(e.code);
   if (e.code === 'KeyR') g.input.reload = false;
   if (e.code === 'Space') g.input.jump = false;
+  if (e.code === 'KeyE') g.input.interact = false;
 });
 window.addEventListener('mousemove', (e) => {
   if (document.pointerLockElement !== renderer.domElement && !g.noLock) return;
@@ -227,6 +249,21 @@ function requestGamePointerLock() {
 }
 
 function restartMatch() {
+  if (g.expedition) {
+    if (g.expedition.state === 'Results') g.expedition.returnToHideout();
+    if (g.expedition.state === 'Hideout') {
+      g.expedition.openLoadout();
+      const run = g.expedition.beginRun({ seed: g.runSeed, testMode: PARAMS.get('testMode') === '1', watcher: PARAMS.get('watcher') !== '0' });
+      g.expedition.deploy();
+      mountExpeditionWorld(run);
+    }
+    g.state.paused = false;
+    g.state.alive = true;
+    $('#death').style.display = 'none';
+    $('#victory').style.display = 'none';
+    requestGamePointerLock();
+    return;
+  }
   g.state.kills = 0;
   g.state.matchWon = false;
   g.state.shots = 0;
@@ -259,7 +296,8 @@ function showVictory() {
 }
 
 g.events.on('enemy:hit', ({ killed }) => {
-  if (killed && g.state.kills >= g.state.matchTarget) showVictory();
+  if (killed && g.expedition) g.expedition.recordKill(1);
+  if (killed && !g.expedition && g.state.kills >= g.state.matchTarget) showVictory();
 });
 
 $('#resume')?.addEventListener('click', requestGamePointerLock);
@@ -282,10 +320,114 @@ invertY?.addEventListener('change', (event) => {
   try { localStorage.setItem('pereval-invert-y', event.target.checked ? '1' : '0'); } catch { /* storage is optional */ }
 });
 $('#victory-restart')?.addEventListener('click', restartMatch);
+$('#expedition-copy-seed')?.addEventListener('click', async () => {
+  try {
+    await window.navigator?.clipboard?.writeText(g.runSeed);
+  } catch {
+    // Clipboard access is optional in local and headless browsers.
+  }
+});
+$('#expedition-next')?.addEventListener('click', () => {
+  $('#expedition-results').style.display = 'none';
+  if (!startExpeditionRun()) return;
+  g.sessionStarted = true;
+  titleEl.style.display = 'none';
+  requestGamePointerLock();
+});
+function startExpeditionRun() {
+  if (!g.expedition) return false;
+  if (g.expedition.state === 'Results') g.expedition.returnToHideout();
+  if (g.expedition.state === 'MainMenu') g.expedition.openHideout();
+  if (g.expedition.state !== 'Hideout') return false;
+  g.expedition.openLoadout();
+  const run = g.expedition.beginRun({
+    seed: g.runSeed,
+    difficulty: PARAMS.get('difficulty') || 'standard',
+    testMode: PARAMS.get('testMode') === '1',
+    watcher: PARAMS.get('watcher') !== '0'
+  });
+  g.expedition.deploy();
+  mountExpeditionWorld(run);
+  g.state.matchWon = false;
+  g.state.alive = true;
+  g.state.paused = false;
+  g.state.time = 0;
+  return true;
+}
+
+function mountExpeditionWorld(run) {
+  if (!g.expeditionAssembler || !run?.map) return;
+  if (g.staticGroup) g.staticGroup.visible = false;
+  g.expeditionScene = g.expeditionAssembler.assemble(run.map);
+  const startNode = run.map.graph.getNode(run.map.graph.startNodeId);
+  if (startNode) {
+    g.player.spawn.set(startNode.position.x, 1.62, startNode.position.z + startNode.definition.size.z * 0.25);
+    g.player.pos.copy(g.player.spawn);
+  }
+}
+
+function showExpeditionResults(result) {
+  if (!g.expedition || !result) return;
+  $('#expedition-result-status').textContent = result.status;
+  $('#expedition-result-seed').textContent = result.seed ?? g.runSeed;
+  $('#expedition-result-kills').textContent = String(result.stats?.kills ?? 0);
+  $('#expedition-results').style.display = 'flex';
+  g.state.paused = true;
+  setPauseOverlay(false);
+  if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+}
+
+function nearestExpeditionModule(maxDistance = 8) {
+  const run = g.expedition?.run;
+  if (!run?.map?.spatialIndex) return null;
+  return run.map.spatialIndex.nearest(
+    { x: g.player.pos.x, z: g.player.pos.z },
+    maxDistance,
+    (candidate) => Boolean(candidate.moduleId),
+  );
+}
+
+function playerAtExpeditionNode(nodeId) {
+  const node = g.expedition?.run?.map?.graph?.getNode?.(nodeId);
+  if (!node) return false;
+  const distance = Math.hypot(g.player.pos.x - node.position.x, g.player.pos.z - node.position.z);
+  return distance <= Math.max(node.definition.size.x, node.definition.size.z) * 0.45;
+}
+
+function interactWithExpedition() {
+  const manager = g.expedition;
+  const run = manager?.run;
+  if (!manager || !run) return false;
+  const module = nearestExpeditionModule();
+  if (!module) return false;
+  if (manager.state === 'Exploration') {
+    const step = run.objective.steps[run.objective.currentStep];
+    if (step?.nodeId === module.id) {
+      manager.startObjective();
+      return true;
+    }
+  }
+  if (manager.state === 'ObjectiveActive') {
+    const step = run.objective.steps[run.objective.currentStep];
+    if (step?.nodeId === module.id) return manager.completeObjectiveStep(step.id);
+  }
+  if (manager.state === 'ExtractionAvailable' && playerAtExpeditionNode(run.extraction.nodeId)) {
+    manager.activateExtraction();
+    return true;
+  }
+  return false;
+}
 // старт по клику на баннер (баннер перекрывает canvas — вешаем обработчик на него)
 titleEl.addEventListener('click', () => {
   if (g.demo) return;
   if (!g.state.alive) return;
+  if (g.expedition) {
+    if (!startExpeditionRun()) return;
+    g.sessionStarted = true;
+    titleEl.style.display = 'none';
+    requestGamePointerLock();
+    return;
+  }
   g.sessionStarted = true;
   titleEl.style.display = 'none';
   requestGamePointerLock();
@@ -297,7 +439,7 @@ document.addEventListener('pointerlockchange', () => {
     g.noLock = false;
     g.state.paused = false;
     setPauseOverlay(false);
-  } else if (!g.noLock && !g.state.matchWon) {
+  } else if (!g.noLock && !g.state.matchWon && !g.expedition?.run?.result) {
     g.state.paused = true;
     setPauseOverlay(true);
   }
@@ -475,7 +617,14 @@ function hurtPlayer(dmg, source) {
   if (result.killed) {
     g.input.fire = false; g.input.ads = false;
     $('#death').style.display = 'flex';
-    deathTimer = 3.0;
+    if (g.expedition?.run) {
+      g.expedition.playerDied('player-died');
+      g.state.paused = true;
+      if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+      deathTimer = -1;
+    } else {
+      deathTimer = 3.0;
+    }
   }
   return result;
 }
@@ -505,6 +654,11 @@ function frame() {
   g.debug.fps = g.debug.fps * 0.9 + (1 / Math.max(dt, 0.001)) * 0.1;
   const simDt = g.demo || !g.state.paused ? dt : 0;
   if (simDt > 0) g.state.time += simDt;
+  if (g.expedition && simDt > 0 && g.expedition.run) {
+    const extractionNodeId = g.expedition.run.extraction.nodeId;
+    g.expedition.tick(simDt, { insideExtraction: playerAtExpeditionNode(extractionNodeId) });
+    g.state.time = g.expedition.run.elapsedSeconds;
+  }
   grainPass.uniforms.time.value = g.state.time;
 
   // WASD-движение и спринт (каждый кадр — надёжнее обработчиков)
@@ -521,6 +675,10 @@ function frame() {
     // поворот камеры даже стоя (для прицеливания)
     camera.rotation.x = g.player.pitch + g.recoil.pitch * 1.4;
     camera.rotation.y = g.player.yaw;
+    if (g.expedition && g.input.interact) {
+      interactWithExpedition();
+      g.input.interact = false;
+    }
   }
 
   if (mods.world && mods.world.update) mods.world.update(simDt, g);
@@ -542,6 +700,12 @@ window.addEventListener('resize', () => {
 
 // ---------- старт ----------
 async function boot() {
+  if (g.expedition) {
+    g.expedition.start();
+    g.expedition.onChange((event) => {
+      if (event.type === 'run-finished') showExpeditionResults(event.result);
+    });
+  }
   if (mods.world && mods.world.init) mods.world.init(g);
   if (mods.combat && mods.combat.init) mods.combat.init(g);
   if (mods.bots && mods.bots.init) mods.bots.init(g);
