@@ -92,9 +92,9 @@ npm run test:e2e         # lifecycle, seed passes, encounter spawn, combat, paus
 npm run benchmark        # writes docs/qa/final/benchmark.json and demo.png
 ```
 
-The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.69 FPS, 372.06 ms sampled frame time, 805 draw calls, 11,443 triangles, 50 resources, and 3.56 MB encoded resource bytes. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
+The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.65 FPS, 376.92 ms sampled frame time, 861 draw calls, 12,039 triangles, 50 resources, and 3.58 MB encoded resource bytes. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
 
-The build currently emits one main JavaScript chunk of about 702.63 kB minified and 190.00 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
+The build currently emits one main JavaScript chunk of about 705.03 kB minified and 190.80 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
 
 `npm audit --omit=dev --audit-level=high` is clean. The full development-tool audit currently reports five transitive Vite/Vitest/esbuild advisories; the available `npm audit fix --force` is a breaking upgrade, so it is intentionally not applied in this gameplay pass.
 

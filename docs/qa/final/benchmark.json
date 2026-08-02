@@ -1,15 +1,15 @@
 {
-  "generatedAt": "2026-08-02T17:47:54.216Z",
+  "generatedAt": "2026-08-02T17:57:48.820Z",
   "url": "http://127.0.0.1:4174/?mode=arena&demo=1&debug=1",
-  "firstLoadMs": 667.75,
+  "firstLoadMs": 647.54,
   "pageErrors": [],
   "consoleErrors": [],
-  "elapsedMs": 1860.3,
-  "fps": 2.69,
-  "frameTimeMs": 372.06,
+  "elapsedMs": 1884.6,
+  "fps": 2.65,
+  "frameTimeMs": 376.92,
   "renderer": {
-    "calls": 805,
-    "triangles": 11443,
+    "calls": 861,
+    "triangles": 12039,
     "points": 816,
     "lines": 0
   },
@@ -39,5 +39,5 @@
     "pointerLocked": false
   },
   "resourceCount": 50,
-  "encodedBytes": 3562040
+  "encodedBytes": 3583102
 }

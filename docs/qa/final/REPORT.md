@@ -19,13 +19,13 @@ Branch: `codex/procedural-expedition`
 
 The checked-in benchmark is from `?mode=arena&demo=1&debug=1` at 1280×720 in headless Chromium on the local machine. It recorded:
 
-- first load: 667.75 ms
-- sample: 1,860.30 ms, 2.69 FPS, 372.06 ms sampled frame time
-- renderer: 805 calls, 11,443 triangles, 816 points, 0 lines
-- resources: 50 entries, 3,562,040 encoded bytes
+- first load: 647.54 ms
+- sample: 1,884.60 ms, 2.65 FPS, 376.92 ms sampled frame time
+- renderer: 861 calls, 12,039 triangles, 816 points, 0 lines
+- resources: 50 entries, 3,583,102 encoded bytes
 - page errors: none; console errors: none
 
-The production bundle measured 702.63 kB minified / 190.00 kB gzip in the same build.
+The production bundle measured 705.03 kB minified / 190.80 kB gzip in the same build.
 
 The in-app browser visual check showed approximately 60 FPS and 16.7 ms frame time under a different browser/GPU path. These measurements are reported separately and are not extrapolated into a universal hardware claim.
 
