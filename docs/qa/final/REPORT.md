@@ -12,7 +12,7 @@ Branch: `codex/procedural-expedition`
 | `npm run lint`         | passed                           |
 | `npm run format:check` | passed                           |
 | `npm run build`        | passed                           |
-| `npm run test:e2e`     | 8 passed; no page/console errors |
+| `npm run test:e2e`     | 9 passed; no page/console errors |
 | `npm run benchmark`    | completed; JSON written          |
 
 ## Measured benchmark
@@ -33,7 +33,7 @@ The in-app browser visual check showed approximately 60 FPS and 16.7 ms frame ti
 
 The interface keeps the original military desert-base identity, warm low sun, teal shadow contrast, anomalous weapon motif, restrained HUD, and readable title treatment. The pause/settings overlay and victory screen share the same visual language. The generated concept image is preserved under `assets/concepts/` as a reference, while runtime materials remain procedural and local.
 
-The expedition E2E visual artifact is `docs/qa/expedition/seed-e2e.png`: a real seeded run entering the generated module layout, then completing an accelerated objective and extraction into the results overlay. The expedition E2E suite also verifies a pressure-triggered mid-run encounter and the hideout's persisted success/failure history.
+The expedition E2E visual artifact is `docs/qa/expedition/seed-e2e.png`: a real seeded run entering the generated module layout, then completing an accelerated objective and extraction into the results overlay. The expedition E2E suite also verifies a pressure-triggered mid-run encounter, multi-module bot navigation, persisted success/failure history, and a virtual 20-minute normal-mode duration soak.
 
 ## Known issues / next pass
 

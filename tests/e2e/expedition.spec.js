@@ -109,3 +109,39 @@ test('spawns a safe deterministic mid-run encounter after pressure rises', async
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
 });
+
+test('survives a virtual twenty-minute normal-mode duration soak', async ({ page }) => {
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+
+  await page.goto('/?mode=expedition&seed=normal-duration&watcher=1&debug=1');
+  await page.locator('#title').click();
+  await page.locator('#hideout-loadout').click();
+  await page.locator('#loadout-deploy').click();
+  await page.waitForTimeout(250);
+  await page.evaluate(() => {
+    for (let step = 0; step < 120; step += 1) {
+      if (step % 20 === 0)
+        window.__PEREVAL_DEBUG__?.recordNoise?.({ kind: 'shot', intensity: 3, duration: 2 });
+      window.__PEREVAL_DEBUG__?.tickRun?.(10);
+    }
+  });
+
+  const snapshot = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.());
+  const encounter = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getEncounterState?.());
+  expect(snapshot?.state).toBe('Exploration');
+  expect(snapshot?.run?.elapsedSeconds).toBeGreaterThanOrEqual(1200);
+  expect(snapshot?.run?.elapsedSeconds).toBeLessThan(1201);
+  expect(snapshot?.run?.threat).toBeGreaterThanOrEqual(0);
+  expect(snapshot?.run?.threat).toBeLessThanOrEqual(100);
+  expect(snapshot?.run?.anomaly).toBeGreaterThanOrEqual(0);
+  expect(snapshot?.run?.anomaly).toBeLessThanOrEqual(100);
+  expect(encounter?.groups?.filter((group) => group.state === 'spawned').length).toBeGreaterThan(0);
+  expect(encounter?.groups?.filter((group) => group.state === 'pending').length).toBe(0);
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+});
