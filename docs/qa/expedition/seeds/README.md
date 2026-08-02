@@ -18,4 +18,5 @@ The graph, points, events, and generated placements are deterministic for each s
 ```text
 node --input-type=module -e "import { WorldGenerator } from './src/expedition/worldGenerator.js'; console.log(new WorldGenerator().generate({seed:'watcher'}).graph.serialize())"
 ```
+
 The deterministic browser test uses seed e2e and produces [seed-e2e.png](../seed-e2e.png), including the generated module frame, HUD/debug state, and results overlay after an accelerated objective/extraction flow.
