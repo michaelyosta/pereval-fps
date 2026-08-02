@@ -82,6 +82,7 @@ export class RunManager {
       throw new Error(`Cannot begin a run from ${this.state}`);
     }
     const config = options instanceof RunConfig ? options : new RunConfig(options);
+    this.run?.map?.dispose?.();
     this.transition(RunState.GeneratingRun, 'generate-run');
     try {
       const generatedWorld = this.generator.generate(config);
@@ -180,6 +181,17 @@ export class RunManager {
     return this.run;
   }
 
+  restart(reason = 'restart') {
+    if (!this.run) return false;
+    if (this.state === RunState.Results) return true;
+    if (this.state === RunState.RunSuccess) this.transition(RunState.Results, reason);
+    else if (this.state !== RunState.RunFailed) {
+      this.transition(RunState.RunFailed, reason);
+      this.transition(RunState.Results, reason);
+    } else this.transition(RunState.Results, reason);
+    return true;
+  }
+
   tick(seconds, { insideExtraction = true, playerPosition = null, playerNodeId = null } = {}) {
     if (!this.run || !Number.isFinite(seconds) || seconds <= 0) return;
     if (
@@ -231,6 +243,8 @@ export class RunManager {
 
   nodeForPosition(position) {
     if (!this.run?.map?.graph || !position) return null;
+    const navNode = this.run.map.navigationMesh?.nodeForPosition?.(position);
+    if (navNode) return navNode;
     let nearest = null;
     let nearestDistance = Infinity;
     for (const [id, record] of this.run.map.graph.nodes) {

@@ -393,6 +393,7 @@ let bots = [];
 let botsGroup = null;
 let navigationGraph = null;
 let navigationPlanner = null;
+let navigationMesh = null;
 
 function createBot(spawnPos, archetype = 'soldier') {
   const definition = getEnemyDefinition(archetype);
@@ -637,6 +638,8 @@ export function init(g) {
 
 export function spawnBots(g, n = 8) {
   if (!spawnPoints.length) buildSpawnPoints();
+  for (const pickup of pickups) pickup.mesh?.parent?.remove(pickup.mesh);
+  pickups.length = 0;
   // очистить старых (повторный вызов идемпотентен)
   for (const b of bots) {
     if (b.mesh && b.mesh.parent) b.mesh.parent.remove(b.mesh);
@@ -644,6 +647,7 @@ export function spawnBots(g, n = 8) {
   bots = [];
   navigationGraph = null;
   navigationPlanner = null;
+  navigationMesh = null;
   const expeditionGroups = g.expedition?.run?.map?.enemyGroups;
   if (expeditionGroups?.length) {
     const groups = g.expedition.encounterDirector?.claimInitialGroups?.(n, {
@@ -759,6 +763,7 @@ function getNavigationPlanner(g) {
   if (graph !== navigationGraph) {
     navigationGraph = graph;
     navigationPlanner = graph ? new ConnectorAwarePlanner(graph) : null;
+    navigationMesh = g.expedition?.run?.map?.navigationMesh ?? null;
   }
   return navigationPlanner;
 }
@@ -847,7 +852,7 @@ function updateNavigationPatrol(b, dt) {
     b.navigationAgent = null;
     return false;
   }
-  if (!b.navigationAgent) b.navigationAgent = new NavigationAgent(planner);
+  if (!b.navigationAgent) b.navigationAgent = new NavigationAgent(planner, navigationMesh);
   b.navigationAgent.setTarget(currentNodeId, playerNodeId);
   const waypoint = b.navigationAgent.waypoint(
     currentNodeId,

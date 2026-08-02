@@ -176,8 +176,13 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
       calls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles,
       points: renderer.info.render.points,
-      lines: renderer.info.render.lines
+      lines: renderer.info.render.lines,
+      memory: {
+        geometries: renderer.info.memory.geometries,
+        textures: renderer.info.memory.textures,
+      },
     }),
+    getNavigationMeshState: () => g.expedition?.run?.map?.navigationMesh?.snapshot?.() ?? null,
     getRunState: () => g.expedition?.snapshot?.() ?? null,
     getEncounterState: () => g.expedition?.encounterDirector?.snapshot?.() ?? null,
     getBotState: () => mods.bots?.getBots?.().map((bot) => ({
@@ -442,7 +447,9 @@ function hideSkillChoice(resume = true) {
 
 function restartMatch() {
   if (g.expedition) {
+    if (!['Hideout', 'Loadout', 'Results'].includes(g.expedition.state)) g.expedition.restart('manual-restart');
     if (g.expedition.state === 'Results') g.expedition.returnToHideout();
+    if (g.expedition.state === 'MainMenu') g.expedition.openHideout();
     if (g.expedition.state === 'Hideout') {
       g.expedition.openLoadout();
       const run = g.expedition.beginRun({

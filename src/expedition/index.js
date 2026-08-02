@@ -3,6 +3,7 @@ export * from './worldGraph.js';
 export * from './worldValidator.js';
 export * from './worldGenerator.js';
 export * from './worldRuntime.js';
+export * from './navMesh.js';
 export * from './objectives.js';
 export * from './extraction.js';
 export * from './inventory.js';

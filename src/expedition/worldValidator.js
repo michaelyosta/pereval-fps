@@ -41,6 +41,8 @@ export class WorldValidator {
 
     for (const [name, route] of Object.entries(world?.navigation ?? {})) {
       if (!route || !connectorRouteIsValid(graph, route)) errors.push(`invalid connector route: ${name}`);
+      if (world?.navigationMesh && !world.navigationMesh.validateRoute(route))
+        errors.push(`invalid navigation mesh route: ${name}`);
     }
 
     if (graph && ![...graph.nodes.keys()].some((id) => graph.degree(id) > 2))

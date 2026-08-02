@@ -1,6 +1,6 @@
 # Expedition seed manifest
 
-These are real deterministic generation snapshots produced on 2026-08-02 with `WorldGenerator`. They cover the authored graph, objective, extraction, loot, enemy archetypes, and Watcher candidate placement. They are not substitutes for a full manual 20–30 minute expedition; the accelerated browser lifecycle and restart-soak checks are tracked separately.
+These are real deterministic generation snapshots produced on 2026-08-02 with `WorldGenerator`. They cover the authored graph, objective, extraction, loot, enemy archetypes, Watcher candidate placement, and module-local polygon navigation metadata. They are not substitutes for a full manual 20–30 minute expedition; the accelerated browser lifecycle and restart-soak checks are tracked separately.
 
 | Label        | Seed           | Modules | Main path | Objective       | Alternative extraction | Loot | Enemy groups | Watcher groups | Notable tags                            |
 | ------------ | -------------- | ------: | --------: | --------------- | ---------------------- | ---: | -----------: | -------------: | --------------------------------------- |

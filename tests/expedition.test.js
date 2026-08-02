@@ -21,6 +21,7 @@ import { InteractionSystem, Interactable } from '../src/expedition/interactions.
 import { EventDirector } from '../src/expedition/events.js';
 import { EncounterDirector } from '../src/expedition/encounters.js';
 import { ConnectorAwarePlanner, NavigationAgent } from '../src/expedition/navigation.js';
+import { ExpeditionNavMesh } from '../src/expedition/navMesh.js';
 import * as THREE from 'three';
 import { ThreeWorldAssembler } from '../src/expedition/threeWorldAssembler.js';
 
@@ -98,6 +99,21 @@ describe('seeded expedition generation', () => {
     expect(new WorldValidator().validate(first).valid).toBe(true);
     expect(first.graph.serialize()).not.toEqual(third.graph.serialize());
     expect(first.generationAttempts).toBeLessThanOrEqual(6);
+    expect(first.navigationMesh.snapshot()).toMatchObject({
+      nodeCount: first.graph.nodes.size,
+      polygonCount: first.graph.nodes.size * 2,
+    });
+    expect(first.navigationMesh.validateRoute(first.navigation.main)).toBe(true);
+    const navigationMesh = new ExpeditionNavMesh(first.graph);
+    expect(navigationMesh.nodeForPosition(first.graph.getNode(first.graph.startNodeId).position)).toBe(
+      first.graph.startNodeId,
+    );
+    const meshAgent = new NavigationAgent(new ConnectorAwarePlanner(first.graph), navigationMesh);
+    meshAgent.setTarget(first.graph.startNodeId, first.graph.extractionNodeId);
+    expect(
+      meshAgent.waypoint(first.graph.startNodeId, first.graph.getNode(first.graph.startNodeId).position),
+    ).toMatchObject({ phase: 'local' });
+    navigationMesh.dispose();
   });
 
   it('keeps logical world generation separate from an indexed assembly plan', () => {
@@ -142,6 +158,24 @@ describe('expedition run lifecycle', () => {
     expect(manager.state).toBe(RunState.Exploration);
     manager.completeObjective();
     expect(manager.state).toBe(RunState.ExtractionAvailable);
+  });
+
+  it('restarts an active run through a fresh generated world without recording a fake result', () => {
+    const manager = startedManager();
+    const previousRun = manager.run;
+    const previousMesh = previousRun.map.navigationMesh;
+    expect(manager.restart('soak-restart')).toBe(true);
+    expect(manager.state).toBe(RunState.Results);
+    expect(manager.campaign.runHistory).toHaveLength(0);
+    manager.returnToHideout();
+    manager.openLoadout();
+    manager.beginRun({ seed: 'lifecycle-restarted', testMode: true });
+    manager.deploy();
+    expect(manager.run).not.toBe(previousRun);
+    expect(manager.run.map).not.toBe(previousRun.map);
+    expect(previousMesh.snapshot().nodeCount).toBe(0);
+    expect(manager.run.elapsedSeconds).toBe(0);
+    expect(manager.state).toBe(RunState.Exploration);
   });
 
   it('succeeds only after the extraction timer completes', () => {

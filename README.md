@@ -92,9 +92,9 @@ npm run test:e2e         # lifecycle, seed passes, encounter spawn, combat, paus
 npm run benchmark        # writes docs/qa/final/benchmark.json and demo.png
 ```
 
-The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.65 FPS, 376.92 ms sampled frame time, 861 draw calls, 12,039 triangles, 50 resources, and 3.58 MB encoded resource bytes. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
+The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.60 FPS, 384.64 ms sampled frame time, 833 draw calls, 11,575 triangles, 51 resources, 3.64 MB encoded resource bytes, 336 geometries, and 41 textures. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
 
-The build currently emits one main JavaScript chunk of about 705.03 kB minified and 190.80 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
+The build currently emits one main JavaScript chunk of about 711.23 kB minified and 192.78 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
 
 `npm audit --omit=dev --audit-level=high` is clean. The full development-tool audit currently reports five transitive Vite/Vitest/esbuild advisories; the available `npm audit fix --force` is a breaking upgrade, so it is intentionally not applied in this gameplay pass.
 
@@ -104,7 +104,7 @@ The runtime uses local CanvasTexture materials. Color maps are tagged `THREE.SRG
 
 ## Scope and limitations
 
-The expedition foundation is a compact vertical slice rather than a production multiplayer/AAA stack. There is no networking, content streaming, skeletal animation pipeline, baked lightmap, or external PBR asset library. The authored expedition graph, connector-aware routes, objective data, extraction points, loot placements, events, finite encounter groups, selected loadout, and skill rewards are deterministic by seed; the hideout persists campaign stash, unlocks, best time, and bounded run history through `SaveSystem`, while temporary run skills are discarded on death. Full polygon navmesh movement, code splitting, and draw-call-heavy decoration profiling remain known optimization targets. Legacy arena decoration remains a separate compatibility path. Headless browser performance is software-dependent; use the in-app debug overlay or a real browser on the target GPU for hardware decisions.
+The expedition foundation is a compact vertical slice rather than a production multiplayer/AAA stack. There is no networking, content streaming, skeletal animation pipeline, baked lightmap, or external PBR asset library. The authored expedition graph, connector-aware routes, module-local polygon navmesh, objective data, extraction points, loot placements, events, finite encounter groups, selected loadout, and skill rewards are deterministic by seed; the hideout persists campaign stash, unlocks, best time, and bounded run history through `SaveSystem`, while temporary run skills are discarded on death. Arbitrary internal obstacle baking, a fully general long-range path follower, code splitting, and draw-call-heavy decoration profiling remain known optimization targets. Legacy arena decoration remains a separate compatibility path. Headless browser performance is software-dependent; use the in-app debug overlay or a real browser on the target GPU for hardware decisions.
 
 See [EXPEDITION_AUDIT.md](docs/design/EXPEDITION_AUDIT.md) for the original defect inventory and [docs/qa/final/REPORT.md](docs/qa/final/REPORT.md) for the final verification record.
 

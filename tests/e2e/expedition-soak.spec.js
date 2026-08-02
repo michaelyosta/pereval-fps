@@ -22,6 +22,8 @@ test('restarts seeded expedition scenes without stale runtime state', async ({ p
         state: window.__PEREVAL_DEBUG__?.getRunState?.().state,
         modules: window.__PEREVAL_DEBUG__?.getRunState?.().run?.map?.modules?.length,
         renderer: window.__PEREVAL_DEBUG__?.getRendererInfo?.(),
+        navMesh: window.__PEREVAL_DEBUG__?.getNavigationMeshState?.(),
+        elapsed: window.__PEREVAL_DEBUG__?.getRunState?.().run?.elapsedSeconds,
       })),
     );
   }
@@ -30,5 +32,9 @@ test('restarts seeded expedition scenes without stale runtime state', async ({ p
   expect(samples.every((sample) => sample.state === 'Exploration')).toBe(true);
   expect(samples.every((sample) => sample.modules >= 10 && sample.modules <= 16)).toBe(true);
   expect(samples.every((sample) => Number.isFinite(sample.renderer?.calls))).toBe(true);
+  expect(samples.every((sample) => sample.navMesh?.polygonCount === sample.modules * 2)).toBe(true);
+  expect(samples.every((sample) => sample.elapsed < 1)).toBe(true);
+  const geometryCounts = samples.map((sample) => sample.renderer?.memory?.geometries ?? 0);
+  expect(Math.max(...geometryCounts) - Math.min(...geometryCounts)).toBeLessThanOrEqual(2);
   expect(pageErrors).toEqual([]);
 });

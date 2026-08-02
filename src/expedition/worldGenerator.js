@@ -6,6 +6,7 @@ import { WorldValidator } from './worldValidator.js';
 import { GeneratedWorld } from './worldRuntime.js';
 import { LootContainer } from './loot.js';
 import { ConnectorAwarePlanner } from './navigation.js';
+import { ExpeditionNavMesh } from './navMesh.js';
 
 const TRANSIT_MODULES = [
   'container_terminal',
@@ -330,6 +331,7 @@ export class WorldGenerator {
       graph.branchNodeIds.find((id) => graph.getNode(id).definition.tags.includes('danger')) ??
       graph.branchNodeIds.at(-1);
     const planner = new ConnectorAwarePlanner(graph);
+    const navigationMesh = new ExpeditionNavMesh(graph);
     const navigation = {
       main: planner.plan(start.id, extraction.id),
       objective: planner.plan(start.id, objective.id),
@@ -347,6 +349,7 @@ export class WorldGenerator {
       events,
       temporarySkills,
       navigation,
+      navigationMesh,
       startResources: lootContainers
         .filter((item) => item.nodeId === start.id)
         .slice(0, 3)

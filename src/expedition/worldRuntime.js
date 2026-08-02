@@ -100,6 +100,7 @@ export class GeneratedWorld {
 
   dispose() {
     this.spatialIndex.clear();
+    this.navigationMesh?.dispose?.();
   }
 }
 

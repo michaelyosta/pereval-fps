@@ -30,6 +30,9 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
   expect(snapshot?.run?.loadout?.primaryWeapon).toBe('rifle');
   expect(snapshot?.run?.map?.modules?.length).toBeGreaterThanOrEqual(10);
   expect(snapshot?.run?.map?.modules?.length).toBeLessThanOrEqual(16);
+  const navigationMesh = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getNavigationMeshState?.());
+  expect(navigationMesh?.nodeCount).toBe(snapshot?.run?.map?.modules?.length);
+  expect(navigationMesh?.polygonCount).toBe(navigationMesh?.nodeCount * 2);
   expect(await page.locator('#debug-run-state').textContent()).toBe('Exploration');
   const objective = await page.evaluate(() => window.__PEREVAL_DEBUG__?.completeObjective?.());
   expect(objective?.completed).toBe(true);
@@ -91,7 +94,12 @@ test('spawns a safe deterministic mid-run encounter after pressure rises', async
   expect(initialBots?.length).toBeGreaterThan(0);
   await page.waitForTimeout(500);
   const navigatingBots = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getBotState?.());
-  expect(navigatingBots?.some((bot) => (bot.navigation?.nodes?.length ?? 0) > 1)).toBe(true);
+  expect(
+    navigatingBots?.some(
+      (bot) =>
+        (bot.navigation?.nodes?.length ?? 0) > 1 && Number.isInteger(bot.navigation?.localWaypointIndex),
+    ),
+  ).toBe(true);
   for (let index = 0; index < 3; index += 1)
     await page.evaluate(() => window.__PEREVAL_DEBUG__?.killNearestEnemy?.());
   await page.evaluate(() => {

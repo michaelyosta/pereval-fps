@@ -109,13 +109,15 @@ export class ConnectorAwarePlanner {
 }
 
 export class NavigationAgent {
-  constructor(planner) {
+  constructor(planner, navigationMesh = null) {
     this.planner = planner;
+    this.navigationMesh = navigationMesh;
     this.route = null;
     this.currentNodeId = null;
     this.targetNodeId = null;
     this.transitionIndex = 0;
     this.crossingIndex = null;
+    this.localWaypointIndex = 0;
   }
 
   setTarget(currentNodeId, targetNodeId) {
@@ -125,6 +127,7 @@ export class NavigationAgent {
     this.targetNodeId = targetNodeId;
     this.transitionIndex = 0;
     this.crossingIndex = null;
+    this.localWaypointIndex = 0;
     this.route =
       currentNodeId && targetNodeId && currentNodeId !== targetNodeId
         ? (this.planner?.plan(currentNodeId, targetNodeId) ?? null)
@@ -140,9 +143,23 @@ export class NavigationAgent {
       if (currentNodeId === transition.to) {
         this.transitionIndex += 1;
         this.crossingIndex = null;
+        this.localWaypointIndex = 0;
         continue;
       }
       if (currentNodeId !== transition.from) return null;
+      const localWaypoints = this.navigationMesh?.waypointsForTransition?.(transition) ?? null;
+      if (localWaypoints?.length) {
+        if (this.localWaypointIndex >= localWaypoints.length) return null;
+        const localWaypoint = localWaypoints[this.localWaypointIndex];
+        const localDistance = Math.hypot(position.x - localWaypoint.x, position.z - localWaypoint.z);
+        if (localDistance <= radius) {
+          if (this.localWaypointIndex === 1) this.crossingIndex = this.transitionIndex;
+          this.localWaypointIndex += 1;
+          if (this.localWaypointIndex >= localWaypoints.length) return null;
+          return { ...localWaypoints[this.localWaypointIndex], transition };
+        }
+        return { ...localWaypoint, transition };
+      }
       if (this.crossingIndex === this.transitionIndex) {
         return { ...transition.toPosition, phase: 'crossing', transition };
       }
@@ -165,6 +182,7 @@ export class NavigationAgent {
       targetNodeId: this.targetNodeId,
       transitionIndex: this.transitionIndex,
       crossingIndex: this.crossingIndex,
+      localWaypointIndex: this.localWaypointIndex,
       nodes: this.route?.nodes ? [...this.route.nodes] : [],
     };
   }
