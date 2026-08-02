@@ -1,6 +1,6 @@
 import { CampaignState } from '../core/expedition/runTypes.js';
 
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 export class SaveSystem {
   constructor({ storage = null, key = 'pereval-campaign' } = {}) {
@@ -16,6 +16,11 @@ export class SaveSystem {
       permanentUnlocks: [...state.permanentUnlocks],
       stash: { ...state.stash },
       bestTime: state.bestTime,
+      runHistory: state.runHistory.map((entry) => ({
+        ...entry,
+        stats: { ...(entry.stats ?? {}) },
+        loot: Array.isArray(entry.loot) ? entry.loot.map((item) => ({ ...item })) : [],
+      })),
     };
   }
 
@@ -65,10 +70,19 @@ export class SaveSystem {
     if ((snapshot.version ?? 0) === SAVE_VERSION) return snapshot;
     return {
       version: SAVE_VERSION,
-      completedRuns: Number.isInteger(snapshot.runs) ? snapshot.runs : 0,
-      permanentUnlocks: Array.isArray(snapshot.unlocks) ? snapshot.unlocks : [],
+      completedRuns: Number.isInteger(snapshot.completedRuns)
+        ? snapshot.completedRuns
+        : Number.isInteger(snapshot.runs)
+          ? snapshot.runs
+          : 0,
+      permanentUnlocks: Array.isArray(snapshot.permanentUnlocks)
+        ? snapshot.permanentUnlocks
+        : Array.isArray(snapshot.unlocks)
+          ? snapshot.unlocks
+          : [],
       stash: snapshot.stash && typeof snapshot.stash === 'object' ? snapshot.stash : {},
       bestTime: Number.isFinite(snapshot.bestTime) ? snapshot.bestTime : null,
+      runHistory: Array.isArray(snapshot.runHistory) ? snapshot.runHistory : [],
     };
   }
 }

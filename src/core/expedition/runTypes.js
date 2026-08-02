@@ -73,11 +73,21 @@ export class RunConfig {
 
 export class CampaignState {
   constructor(snapshot = {}) {
-    this.version = 1;
+    this.version = 2;
     this.completedRuns = Number.isInteger(snapshot.completedRuns) ? snapshot.completedRuns : 0;
     this.permanentUnlocks = Array.isArray(snapshot.permanentUnlocks) ? [...snapshot.permanentUnlocks] : [];
     this.stash = { ...(snapshot.stash ?? {}) };
     this.bestTime = Number.isFinite(snapshot.bestTime) ? snapshot.bestTime : null;
+    this.runHistory = Array.isArray(snapshot.runHistory)
+      ? snapshot.runHistory
+          .filter((entry) => entry && typeof entry === 'object')
+          .slice(0, 12)
+          .map((entry) => ({
+            ...entry,
+            stats: { ...(entry.stats ?? {}) },
+            loot: Array.isArray(entry.loot) ? entry.loot.map((item) => ({ ...item })) : [],
+          }))
+      : [];
   }
 
   clone() {

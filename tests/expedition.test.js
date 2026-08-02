@@ -19,6 +19,8 @@ import { SaveSystem } from '../src/expedition/saveSystem.js';
 import { ItemRegistry, LootContainer } from '../src/expedition/loot.js';
 import { InteractionSystem, Interactable } from '../src/expedition/interactions.js';
 import { EventDirector } from '../src/expedition/events.js';
+import { EncounterDirector } from '../src/expedition/encounters.js';
+import { ConnectorAwarePlanner } from '../src/expedition/navigation.js';
 import * as THREE from 'three';
 import { ThreeWorldAssembler } from '../src/expedition/threeWorldAssembler.js';
 
@@ -71,6 +73,16 @@ describe('seeded expedition generation', () => {
     expect(first.graph.branchNodeIds.length).toBeGreaterThan(0);
     expect(first.graph.hasPath(first.graph.startNodeId, first.graph.objectiveNodeIds[0])).toBe(true);
     expect(first.graph.hasPath(first.graph.startNodeId, first.graph.extractionNodeId)).toBe(true);
+    expect(first.navigation.main.nodes[0]).toBe(first.graph.startNodeId);
+    expect(first.navigation.main.nodes.at(-1)).toBe(first.graph.extractionNodeId);
+    expect(
+      first.navigation.main.transitions.every(
+        (transition) => transition.fromPosition && transition.toPosition,
+      ),
+    ).toBe(true);
+    expect(
+      new ConnectorAwarePlanner(first.graph).next(first.navigation.main, first.graph.startNodeId),
+    ).toEqual(first.navigation.main.transitions[0]);
     expect(new WorldValidator().validate(first).valid).toBe(true);
     expect(first.graph.serialize()).not.toEqual(third.graph.serialize());
     expect(first.generationAttempts).toBeLessThanOrEqual(6);
@@ -130,6 +142,7 @@ describe('expedition run lifecycle', () => {
     expect(manager.state).toBe(RunState.Results);
     expect(manager.run.result).toMatchObject({ status: 'success', seed: 'lifecycle' });
     expect(manager.campaign.completedRuns).toBe(1);
+    expect(manager.campaign.runHistory[0]).toMatchObject({ status: 'success', seed: 'lifecycle' });
     expect(manager.run.temporarySkills).toHaveLength(1);
   });
 
@@ -143,6 +156,7 @@ describe('expedition run lifecycle', () => {
     expect(manager.run.result.temporarySkills).toEqual([]);
     expect(manager.campaign.permanentUnlocks).toEqual(['sidearm-license']);
     expect(manager.campaign.completedRuns).toBe(0);
+    expect(manager.campaign.runHistory[0]).toMatchObject({ status: 'failure', reason: 'watcher' });
   });
 
   it('keeps ordinary extracted resources and one protected artifact in campaign stash', () => {
@@ -356,6 +370,51 @@ describe('expedition interaction services', () => {
     expect(director.phase).not.toBe(ThreatPhase.Recovery);
   });
 
+  it('schedules a deterministic safe mid-run encounter from a dormant group', () => {
+    const world = new WorldGenerator().generate({ seed: 'encounter-runtime' });
+    const playerPosition = world.graph.getNode(world.graph.startNodeId).position;
+    const makeDirector = () => {
+      const threat = new ThreatDirector({ seed: 'encounter-runtime:threat', maxEncounters: 2 });
+      threat.setPlayer({ position: playerPosition, nodeId: world.graph.startNodeId });
+      const director = new EncounterDirector({
+        groups: world.enemyGroups,
+        graph: world.graph,
+        threatDirector: threat,
+        seed: 'encounter-runtime:encounters',
+        testMode: true,
+        activationDelay: 0,
+      });
+      director.claimInitialGroups(2, { playerPosition });
+      return { director, threat };
+    };
+    const left = makeDirector();
+    const right = makeDirector();
+    left.threat.addThreat(42, 'objective-step');
+    right.threat.addThreat(42, 'objective-step');
+    const leftEvent = left.director.update(0.1, {
+      threat: left.threat.threat,
+      anomaly: 0,
+      playerPosition,
+      playerNodeId: world.graph.startNodeId,
+    });
+    const rightEvent = right.director.update(0.1, {
+      threat: right.threat.threat,
+      anomaly: 0,
+      playerPosition,
+      playerNodeId: world.graph.startNodeId,
+    });
+    expect(leftEvent).toMatchObject({ type: 'encounter-requested', trigger: 'threat-threshold' });
+    expect(leftEvent.groupId).toBe(rightEvent.groupId);
+    expect(left.director.snapshot().groups.find((group) => group.id === leftEvent.groupId)?.state).toBe(
+      'pending',
+    );
+    expect(left.director.markSpawned(leftEvent.groupId, ['runtime-bot'])).toBe(true);
+    expect(left.director.snapshot().groups.find((group) => group.id === leftEvent.groupId)).toMatchObject({
+      state: 'spawned',
+      spawnedBotIds: ['runtime-bot'],
+    });
+  });
+
   it('raises anomaly from noise and activates Watcher without teleporting', () => {
     const level = new AnomalyLevel({ decayPerSecond: 0 });
     level.add(72, 'shot');
@@ -435,7 +494,13 @@ describe('expedition interaction services', () => {
       getItem: (key) => storage.get(key) ?? null,
     };
     const save = new SaveSystem({ storage: adapter });
-    const campaign = { completedRuns: 2, permanentUnlocks: ['shotgun'], stash: { ammo: 12 }, bestTime: 42 };
+    const campaign = {
+      completedRuns: 2,
+      permanentUnlocks: ['shotgun'],
+      stash: { ammo: 12 },
+      bestTime: 42,
+      runHistory: [{ status: 'success', seed: 'history', stats: { kills: 4 }, loot: [] }],
+    };
     save.save(campaign);
     expect(save.load()).toMatchObject(campaign);
     expect(save.load(JSON.stringify({ version: 0, runs: 3, unlocks: ['pistol'] }))).toMatchObject({
@@ -443,6 +508,13 @@ describe('expedition interaction services', () => {
       permanentUnlocks: ['pistol'],
     });
     expect(save.load('{broken')).toMatchObject({ completedRuns: 0, permanentUnlocks: [] });
+    expect(
+      save.load(JSON.stringify({ version: 1, completedRuns: 4, permanentUnlocks: ['rifle'] })),
+    ).toMatchObject({
+      completedRuns: 4,
+      permanentUnlocks: ['rifle'],
+      runHistory: [],
+    });
     expect(save.serialize({ temporarySkills: ['quiet-step'] })).not.toHaveProperty('temporarySkills');
     const exported = save.export(campaign);
     expect(save.import(exported)).toMatchObject(campaign);

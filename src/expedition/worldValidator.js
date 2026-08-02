@@ -1,3 +1,5 @@
+import { connectorRouteIsValid } from './navigation.js';
+
 function boundsOverlap(a, b, padding = 0.25) {
   return (
     a.minX < b.maxX - padding &&
@@ -35,6 +37,10 @@ export class WorldValidator {
     if (graph?.startNodeId && graph?.extractionNodeId) {
       const routeLength = graph.shortestPath(graph.startNodeId, graph.extractionNodeId).length;
       if (routeLength < 5) errors.push('main route is too short');
+    }
+
+    for (const [name, route] of Object.entries(world?.navigation ?? {})) {
+      if (!route || !connectorRouteIsValid(graph, route)) errors.push(`invalid connector route: ${name}`);
     }
 
     if (graph && ![...graph.nodes.keys()].some((id) => graph.degree(id) > 2))

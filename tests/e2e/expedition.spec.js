@@ -54,6 +54,7 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
   await expect(page.locator('#expedition-lobby')).toBeVisible();
   expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().state)).toBe('Hideout');
   await expect(page.locator('#hideout-unlocks')).toContainText('field-clearance');
+  await expect(page.locator('#hideout-history-list')).toContainText('SUCCESS');
   await page.locator('#hideout-loadout').click();
   await page.locator('#loadout-deploy').dispatchEvent('click');
   await page.evaluate(() => window.__PEREVAL_DEBUG__?.addTemporarySkill?.('steady-hands'));
@@ -67,6 +68,41 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
   await page.locator('#expedition-next').dispatchEvent('click');
   await expect(page.locator('#expedition-lobby')).toBeVisible();
   await expect(page.locator('#hideout-unlocks')).toContainText('field-clearance');
+  await expect(page.locator('#hideout-history-list')).toContainText('FAILED');
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+});
+
+test('spawns a safe deterministic mid-run encounter after pressure rises', async ({ page }) => {
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+
+  await page.goto('/?mode=expedition&seed=encounter-e2e&testMode=1&watcher=0&debug=1');
+  await page.locator('#title').click();
+  await page.locator('#hideout-loadout').click();
+  await page.locator('#loadout-deploy').click();
+  await page.waitForTimeout(300);
+
+  const initialBots = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getBotState?.());
+  expect(initialBots?.length).toBeGreaterThan(0);
+  for (let index = 0; index < 3; index += 1)
+    await page.evaluate(() => window.__PEREVAL_DEBUG__?.killNearestEnemy?.());
+  await page.evaluate(() => {
+    for (let index = 0; index < 12; index += 1)
+      window.__PEREVAL_DEBUG__?.recordNoise?.({ kind: 'shot', intensity: 3, duration: 2 });
+  });
+  await page.evaluate(() => window.__PEREVAL_DEBUG__?.tickRun?.(2.2));
+
+  const encounter = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getEncounterState?.());
+  const currentBots = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getBotState?.());
+  const requested = encounter?.recentEvents?.find((event) => event.type === 'encounter-requested');
+  expect(requested).toMatchObject({ type: 'encounter-requested', groupId: expect.any(String) });
+  expect(encounter?.groups?.find((group) => group.id === requested.groupId)?.state).toBe('spawned');
+  expect(currentBots?.some((bot) => bot.groupId === requested.groupId)).toBe(true);
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
 });

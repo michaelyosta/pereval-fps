@@ -2,7 +2,7 @@
 
 `Pereval` is a browser FPS prototype built with Three.js. It keeps the original visual brief: a fortified desert outpost at golden hour and the anomalous rifle “OBLOMOK-7”. The playable map, weapon, bots, particles, and WebAudio are local and procedural; there are no remote runtime assets.
 
-The project is now a local Vite application with explicit gameplay services, unit tests, Playwright smoke coverage, a deterministic demo route, debug telemetry, quality presets, and a measured benchmark.
+The project is now a local Vite application with explicit gameplay services, a repeatable survival/extraction expedition loop, unit tests, Playwright coverage, a deterministic demo route, debug telemetry, quality presets, and a measured benchmark.
 
 ## Preview
 
@@ -26,6 +26,7 @@ Useful routes:
 - `/?mode=arena` — preserved five-kill legacy arena for combat regression.
 - `/?mode=arena&demo=1` — cinematic camera and safe presentation scene.
 - `/?debug=1` — compact FPS, frame time, renderer counters, weapon, spread, recoil, and player position overlay.
+- `/?mode=expedition&seed=12345&testMode=1` — accelerated deterministic QA lifecycle.
 - `/?quality=Low|Medium|High|Ultra` — select a render preset without changing gameplay.
 
 Production checks:
@@ -45,6 +46,9 @@ npm run preview
 | Right mouse | Aim down sights |
 | R           | Reload          |
 | Space       | Jump            |
+| E           | Interact        |
+| H           | Heal            |
+| M           | Visited map     |
 | Escape      | Pause / resume  |
 
 If Pointer Lock is unavailable, the game falls back to a normal mouse mode instead of leaving the match in a broken state. Pause freezes match time, AI, weapon timers, and death/respawn progression.
@@ -73,7 +77,7 @@ src/core/ballistics.js   capsule ray tests and wall blocking
 src/core/collision.js    height-aware oriented-box capsule resolver
 src/config/graphics.js   Low/Medium/High/Ultra render presets
 src/core/expedition/     seeded RNG, run lifecycle, campaign contracts
-src/expedition/          authored modules, graph generation, objectives, extraction, inventory, noise, threat
+src/expedition/          authored modules, connector routes, encounters, objectives, extraction, inventory, noise, threat, Watcher
 ```
 
 Modules receive the shared service object through `g.services`; there is no `window.g`, dynamic import cycle, or UI callback overwrite.
@@ -81,16 +85,16 @@ Modules receive the shared service object through `g.services`; there is no `win
 ## Tests and QA
 
 ```bash
-npm test                 # gameplay, ballistics, capsule collision
+npm test                 # gameplay, ballistics, capsule collision, expedition services
 npm run lint
 npm run format:check
-npm run test:e2e         # Chromium smoke: boot, fire, pause, damage, kill, demo
+npm run test:e2e         # lifecycle, seed passes, encounter spawn, combat, pause, demo
 npm run benchmark        # writes docs/qa/final/benchmark.json and demo.png
 ```
 
-The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.71 FPS, 369.30 ms sampled frame time, 860 draw calls, 11,993 triangles, 39 resources, and 3.06 MB encoded resource bytes. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
+The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.69 FPS, 372.06 ms sampled frame time, 805 draw calls, 11,443 triangles, 50 resources, and 3.56 MB encoded resource bytes. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
 
-The build currently emits one main JavaScript chunk of about 641.69 kB minified and 172.58 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
+The build currently emits one main JavaScript chunk of about 702.63 kB minified and 190.00 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
 
 `npm audit --omit=dev --audit-level=high` is clean. The full development-tool audit currently reports five transitive Vite/Vitest/esbuild advisories; the available `npm audit fix --force` is a breaking upgrade, so it is intentionally not applied in this gameplay pass.
 
@@ -100,9 +104,9 @@ The runtime uses local CanvasTexture materials. Color maps are tagged `THREE.SRG
 
 ## Scope and limitations
 
-The expedition foundation is a compact vertical slice rather than a production multiplayer/AAA stack. There is no networking, content streaming, skeletal animation pipeline, baked lightmap, or external PBR asset library. The authored expedition graph, objective data, extraction points, loot placements, events, enemy groups, selected loadout, and skill rewards are deterministic by seed; the hideout/loadout flow persists permanent campaign unlocks through `SaveSystem`, while temporary run skills are discarded on death. Legacy arena decoration remains a separate compatibility path. Headless browser performance is software-dependent; use the in-app debug overlay or a real browser on the target GPU for hardware decisions.
+The expedition foundation is a compact vertical slice rather than a production multiplayer/AAA stack. There is no networking, content streaming, skeletal animation pipeline, baked lightmap, or external PBR asset library. The authored expedition graph, connector-aware routes, objective data, extraction points, loot placements, events, finite encounter groups, selected loadout, and skill rewards are deterministic by seed; the hideout persists campaign stash, unlocks, best time, and bounded run history through `SaveSystem`, while temporary run skills are discarded on death. Full polygon navmesh movement, code splitting, and draw-call-heavy decoration profiling remain known optimization targets. Legacy arena decoration remains a separate compatibility path. Headless browser performance is software-dependent; use the in-app debug overlay or a real browser on the target GPU for hardware decisions.
 
-See [AUDIT.md](AUDIT.md) for the original defect inventory and [docs/qa/final/REPORT.md](docs/qa/final/REPORT.md) for the final verification record.
+See [EXPEDITION_AUDIT.md](docs/design/EXPEDITION_AUDIT.md) for the original defect inventory and [docs/qa/final/REPORT.md](docs/qa/final/REPORT.md) for the final verification record.
 
 ## Expedition foundation
 
@@ -110,7 +114,7 @@ The expedition route owns a single `RunManager` state machine:
 
 `Boot → MainMenu → Hideout → Loadout → GeneratingRun → Deploying → Exploration → ObjectiveActive → ExtractionAvailable → Extracting → Results`.
 
-`?seed=` is preserved in the `RunConfig`, generated graph, objective, extraction points, loot containers, events, enemy groups, temporary skill rewards, debug overlay, and results data. `?mode=arena` remains the explicit legacy regression route. Temporary skills are run-scoped; campaign unlocks and stash data are versioned through `SaveSystem`.
+`?seed=` is preserved in the `RunConfig`, generated graph and connector routes, objective, extraction points, loot containers, events, enemy groups, encounter scheduler, temporary skill rewards, debug overlay, and results data. `?mode=arena` remains the explicit legacy regression route. Threat/Anomaly pressure can schedule safe dormant enemy groups mid-run; expedition kills do not respawn. Temporary skills are run-scoped; campaign unlocks, stash, and recent run history are versioned through `SaveSystem`.
 
 ## License
 

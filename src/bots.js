@@ -421,6 +421,37 @@ function createBot(spawnPos, archetype = 'soldier') {
   return bot;
 }
 
+function spawnEnemyGroup(g, enemyGroup, maxCount = enemyGroup.count) {
+  const spawned = [];
+  const count = Math.max(0, Math.min(enemyGroup.count | 0, maxCount | 0));
+  for (let index = 0; index < count; index += 1) {
+    const [x, z] = findFree(
+      enemyGroup.position.x + (index % 2) * 1.1,
+      enemyGroup.position.z + Math.floor(index / 2) * 1.1,
+      0.7,
+    );
+    const spawn = { position: new THREE.Vector3(x, 0, z), nodeId: enemyGroup.nodeId };
+    const bot = createBot(spawn.position, enemyGroup.archetype);
+    bot.id = `runtime-${enemyGroup.id}-${index}-${bots.length}`;
+    bot.expeditionGroupId = enemyGroup.id;
+    bot.expeditionNodeId = enemyGroup.nodeId;
+    bot.expeditionGroupIndex = index;
+    bots.push(bot);
+    spawned.push(bot);
+    if (bot.role === 'watcher') {
+      g.expedition?.watcher?.registerCandidate({
+        id: bot.id,
+        nodeId: enemyGroup.nodeId,
+        position: { x: bot.mesh.position.x, z: bot.mesh.position.z },
+        bot,
+      });
+    } else {
+      g.expedition?.threatDirector?.registerEnemy(bot);
+    }
+  }
+  return spawned;
+}
+
 // ============================================================
 //  ПУЛЫ: кровь (Points), дульные вспышки (спрайты), трассеры (линии)
 //  Без new в update — всё создаётся заранее.
@@ -607,6 +638,29 @@ export function spawnBots(g, n = 8) {
     if (b.mesh && b.mesh.parent) b.mesh.parent.remove(b.mesh);
   }
   bots = [];
+  const expeditionGroups = g.expedition?.run?.map?.enemyGroups;
+  if (expeditionGroups?.length) {
+    const groups = g.expedition.encounterDirector?.claimInitialGroups?.(n, {
+      playerPosition: { x: g.player.pos.x, z: g.player.pos.z },
+    }) ?? expeditionGroups;
+    let remaining = Math.max(1, n | 0);
+    const spawned = [];
+    for (const enemyGroup of groups) {
+      if (remaining <= 0) break;
+      const groupBots = spawnEnemyGroup(g, enemyGroup, Math.min(enemyGroup.count, remaining));
+      if (groupBots.length) {
+        g.expedition.encounterDirector?.markSpawned?.(
+          enemyGroup.id,
+          groupBots.map((bot) => bot.id),
+        );
+        spawned.push(...groupBots);
+        remaining -= groupBots.length;
+      } else {
+        g.expedition.encounterDirector?.markFailed?.(enemyGroup.id, 'initial-spawn-failed');
+      }
+    }
+    return spawned;
+  }
   const generatedSpawns = g.expedition?.run?.map?.enemyGroups
     ?.flatMap((enemyGroup) => {
       const positions = [];
@@ -658,6 +712,27 @@ export function spawnBots(g, n = 8) {
     bot.id = `runtime-arena-${bots.length}`;
     bots.push(bot);
   }
+}
+
+export function spawnEncounter(g, encounter) {
+  const enemyGroup = encounter?.group ?? g.expedition?.run?.map?.enemyGroups?.find((group) => group.id === encounter?.groupId);
+  if (!enemyGroup) return { ok: false, reason: 'unknown-group' };
+  if (g.expedition?.encounterDirector?.recordById?.(enemyGroup.id)?.state === 'spawned') {
+    return { ok: false, reason: 'already-spawned', groupId: enemyGroup.id };
+  }
+  const groupBots = spawnEnemyGroup(g, enemyGroup);
+  if (!groupBots.length) return { ok: false, reason: 'spawn-failed', groupId: enemyGroup.id };
+  g.expedition?.encounterDirector?.markSpawned?.(
+    enemyGroup.id,
+    groupBots.map((bot) => bot.id),
+  );
+  g.events?.emit('encounter:spawned', {
+    encounter,
+    groupId: enemyGroup.id,
+    botIds: groupBots.map((bot) => bot.id),
+    count: groupBots.length,
+  });
+  return { ok: true, groupId: enemyGroup.id, botIds: groupBots.map((bot) => bot.id) };
 }
 
 export function getGroup() { return botsGroup; }
@@ -957,7 +1032,7 @@ export function applyDamage(g, bot, dmg, dir, point, meta = {}) {
     g.expedition?.threatDirector?.removeEnemy(bot.id);
     bot.state = 'dead';
     bot.deadT = 0; bot.fadeT = 0;
-    bot.respawnT = 7.0;
+    bot.respawnT = gRef?.expedition ? Infinity : 7.0;
     bot.moving = false;
     bot.burstLeft = 0;
     dropPickup(g, bot.mesh.position);   // враг роняет подсумки с патронами

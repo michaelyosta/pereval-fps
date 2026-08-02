@@ -11,6 +11,7 @@ import { NoiseSystem } from '../../expedition/noise.js';
 import { AnomalyLevel } from '../../expedition/anomalyLevel.js';
 import { WatcherDirector } from '../../expedition/watcher.js';
 import { EventDirector } from '../../expedition/events.js';
+import { EncounterDirector } from '../../expedition/encounters.js';
 
 export class RunManager {
   constructor({ generator = new WorldGenerator(), campaign = null, saveSystem = null } = {}) {
@@ -28,6 +29,7 @@ export class RunManager {
     this.anomalyLevel = null;
     this.watcher = null;
     this.eventDirector = null;
+    this.encounterDirector = null;
     this.noiseSequence = 0;
     this.lastNoiseId = null;
     this.campaign = campaign
@@ -110,6 +112,13 @@ export class RunManager {
         enabled: config.watcher,
       });
       this.eventDirector = new EventDirector(generatedWorld.events);
+      this.encounterDirector = new EncounterDirector({
+        groups: generatedWorld.enemyGroups,
+        graph: generatedWorld.graph,
+        threatDirector: this.threatDirector,
+        seed: config.seed.display + ':encounters',
+        testMode: config.testMode,
+      });
       this.watcher.onEvent((event) => this.emit(event));
       this.run.objectiveDirector = this.objectiveDirector;
       this.run.threatDirector = this.threatDirector;
@@ -117,6 +126,7 @@ export class RunManager {
       this.run.anomalyLevel = this.anomalyLevel;
       this.run.watcher = this.watcher;
       this.run.eventDirector = this.eventDirector;
+      this.run.encounterDirector = this.encounterDirector;
       this.run.objective = this.objectiveDirector.instance;
       const weaponDefinition = this.weaponRegistry.get(config.primaryWeapon);
       this.run.equipment = new Equipment();
@@ -194,6 +204,19 @@ export class RunManager {
         playerPosition,
         playerNodeId,
       });
+      this.threatDirector?.setPlayer({
+        position: playerPosition ?? this.threatDirector.player.position,
+        nodeId: playerNodeId,
+      });
+      const encounter = this.encounterDirector?.update(seconds, {
+        threat: this.threatDirector?.threat ?? this.run.threat,
+        anomaly: this.anomalyLevel?.value ?? this.run.anomaly,
+        noise: activeNoise,
+        playerPosition,
+        playerNodeId,
+        state: this.state,
+      });
+      if (encounter) this.emit(encounter);
       this.run.threat = this.threatDirector?.threat ?? this.run.threat;
       this.run.anomaly = this.anomalyLevel?.value ?? this.run.anomaly;
       this.run.anomalyBand = this.anomalyLevel?.band ?? this.run.anomalyBand;
@@ -582,6 +605,19 @@ export class RunManager {
       this.run.loot = [];
       if (this.run.inventory) this.run.inventory.items = [];
     }
+    this.campaign.runHistory.unshift({
+      status,
+      reason,
+      seed: this.run.config.seed.display,
+      elapsedSeconds: this.run.elapsedSeconds,
+      weapon: this.run.loadout.primaryWeapon,
+      anomalyBand: this.run.anomalyBand,
+      modules: this.run.visitedModules.length,
+      events: this.run.stats.eventsResolved,
+      stats: { ...this.run.stats },
+      loot: status === 'success' ? [...this.run.loot] : [],
+    });
+    this.campaign.runHistory = this.campaign.runHistory.slice(0, 12);
     this.run.result = new RunResult({ status, reason, run: this.run, campaign: this.campaign });
     this.saveSystem?.save?.(this.campaign);
     this.emit({ type: 'run-finished', result: this.run.result });
@@ -615,6 +651,7 @@ export class RunManager {
             anomaly: this.run.anomaly,
             anomalyBand: this.run.anomalyBand,
             watcher: this.watcher?.snapshot?.() ?? null,
+            encounters: this.encounterDirector?.snapshot?.() ?? null,
             events: this.eventDirector?.snapshot?.() ?? [],
             loot: [...this.run.loot],
             stats: { ...this.run.stats },

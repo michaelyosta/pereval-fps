@@ -179,6 +179,26 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
       lines: renderer.info.render.lines
     }),
     getRunState: () => g.expedition?.snapshot?.() ?? null,
+    getEncounterState: () => g.expedition?.encounterDirector?.snapshot?.() ?? null,
+    getBotState: () => mods.bots?.getBots?.().map((bot) => ({
+      id: bot.id,
+      archetype: bot.archetype,
+      alive: bot.alive,
+      groupId: bot.expeditionGroupId ?? null,
+    })) ?? [],
+    recordNoise: (options = {}) => g.expedition?.recordNoise?.({
+      ...options,
+      position: options.position ?? { x: g.player.pos.x, z: g.player.pos.z },
+    }) ?? new Map(),
+    tickRun: (seconds = 1) => {
+      if (!g.expedition?.run) return null;
+      g.expedition.tick(seconds, {
+        insideExtraction: false,
+        playerPosition: { x: g.player.pos.x, z: g.player.pos.z },
+        playerNodeId: g.expedition.nodeForPosition({ x: g.player.pos.x, z: g.player.pos.z }),
+      });
+      return g.expedition.snapshot();
+    },
     completeObjective: () => g.expedition?.completeObjective?.() ?? null,
     startExtraction: () => {
       if (!g.expedition) return null;
@@ -194,7 +214,9 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
     damagePlayer: (amount = 10) => g.damagePlayer(amount, { type: 'debug' }),
     restartRun: () => { restartMatch(); return g.expedition?.snapshot?.(); },
     killNearestEnemy: () => {
-      const bot = mods.bots?.getBots?.().find((candidate) => candidate.alive);
+      const bot = mods.bots?.getBots?.().find(
+        (candidate) => candidate.alive && candidate.archetype !== 'watcher',
+      );
       if (!bot) return { killed: false };
       return mods.bots.applyDamage(g, bot, 999, new THREE.Vector3(0, 0, -1), bot.mesh.position, { debug: true });
     }
@@ -253,6 +275,7 @@ const settingsPanel = $('#settings-panel');
 const expeditionLobby = $('#expedition-lobby');
 const expeditionHideoutView = $('#expedition-hideout-view');
 const expeditionLoadoutView = $('#expedition-loadout-view');
+const hideoutCampaignPanels = $('#hideout-campaign-panels');
 const skillChoice = $('#skill-choice');
 const skillChoiceOptions = $('#skill-choice-options');
 const expeditionMap = $('#expedition-map');
@@ -308,6 +331,48 @@ function refreshExpeditionHideout() {
     .map(([id, amount]) => `${id}×${amount}`)
     .join(', ');
   $('#hideout-stash').textContent = stash || 'нет';
+  const stashList = $('#hideout-stash-list');
+  stashList?.replaceChildren();
+  const stashEntries = Object.entries(campaign.stash ?? {}).filter(([, amount]) => amount > 0);
+  if (stashList) {
+    if (!stashEntries.length) {
+      const empty = document.createElement('small');
+      empty.textContent = 'пусто';
+      stashList.append(empty);
+    } else {
+      for (const [id, amount] of stashEntries) {
+        const row = document.createElement('div');
+        row.className = 'expedition-campaign-row';
+        const name = document.createElement('span');
+        name.textContent = id;
+        const count = document.createElement('b');
+        count.textContent = `×${amount}`;
+        row.append(name, count);
+        stashList.append(row);
+      }
+    }
+  }
+  const historyList = $('#hideout-history-list');
+  historyList?.replaceChildren();
+  const history = campaign.runHistory ?? [];
+  if (historyList) {
+    if (!history.length) {
+      const empty = document.createElement('small');
+      empty.textContent = 'нет завершённых выходов';
+      historyList.append(empty);
+    } else {
+      for (const entry of history.slice(0, 8)) {
+        const row = document.createElement('div');
+        row.className = 'expedition-campaign-row';
+        const name = document.createElement('span');
+        name.textContent = `${entry.status === 'success' ? 'SUCCESS' : 'FAILED'} · ${entry.seed ?? '—'}`;
+        const detail = document.createElement('small');
+        detail.textContent = `${Number(entry.elapsedSeconds ?? 0).toFixed(1)}s · K${entry.stats?.kills ?? 0}`;
+        row.append(name, detail);
+        historyList.append(row);
+      }
+    }
+  }
 }
 
 function showExpeditionHideout() {
@@ -324,6 +389,7 @@ function showExpeditionHideout() {
   expeditionLobby.style.display = 'flex';
   expeditionHideoutView.style.display = 'block';
   expeditionLoadoutView.style.display = 'none';
+  if (hideoutCampaignPanels) hideoutCampaignPanels.style.display = 'grid';
   refreshExpeditionHideout();
   return true;
 }
@@ -333,6 +399,7 @@ function showExpeditionLoadout() {
   g.expedition.openLoadout();
   expeditionHideoutView.style.display = 'none';
   expeditionLoadoutView.style.display = 'block';
+  if (hideoutCampaignPanels) hideoutCampaignPanels.style.display = 'none';
   return true;
 }
 
@@ -969,6 +1036,10 @@ async function boot() {
       if (event.type === 'watcher-activated') {
         mods.bots?.activateWatcher?.(g, event.candidateId);
         g.events.emit('watcher:activated', event);
+      }
+      if (event.type === 'encounter-requested') {
+        const result = mods.bots?.spawnEncounter?.(g, event);
+        if (!result?.ok) g.expedition?.encounterDirector?.markFailed?.(event.groupId, result?.reason);
       }
     });
   }

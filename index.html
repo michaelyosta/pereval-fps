@@ -180,6 +180,13 @@
   .expedition-lobby-meta{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:18px 0 24px; color:#a7b5b2; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
   .expedition-lobby-meta b{ display:block; color:#fff; font-size:16px; margin-top:5px; text-transform:none; }
   .expedition-lobby-meta input{ width:100%; box-sizing:border-box; margin-top:5px; padding:7px; border:1px solid rgba(240,189,101,.28); background:#11191c; color:#fff; font:inherit; }
+  .expedition-campaign-panels{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:0 0 24px; }
+  .expedition-campaign-panel{ min-height:96px; padding:11px; border:1px solid rgba(240,189,101,.16); background:rgba(240,189,101,.045); color:#a7b5b2; font-size:10px; letter-spacing:1px; text-transform:uppercase; }
+  .expedition-campaign-panel > b{ display:block; margin-bottom:8px; color:#f0d09b; font-size:10px; }
+  .expedition-campaign-list{ display:grid; gap:5px; max-height:116px; overflow:auto; text-transform:none; letter-spacing:.2px; }
+  .expedition-campaign-row{ display:flex; justify-content:space-between; gap:8px; color:#d4d9d4; }
+  .expedition-campaign-row small{ color:#84918d; }
+  @media (max-width: 560px){ .expedition-campaign-panels{ grid-template-columns:1fr; } }
   .expedition-lobby-actions{ display:grid; gap:8px; }
   .expedition-lobby-actions button{ border:1px solid rgba(240,189,101,.35); background:rgba(240,189,101,.12); color:#f7ecd9; padding:11px; cursor:pointer; font:inherit; letter-spacing:1px; }
   .expedition-loadout-field{ display:grid; gap:7px; margin:22px 0; color:#a7b5b2; font-size:11px; letter-spacing:2px; text-transform:uppercase; }
@@ -290,6 +297,10 @@
         <div class="expedition-lobby-copy">Подготовьте снаряжение, проверьте постоянные открытия и выберите маршрут для следующей вылазки.</div>
         <div class="expedition-lobby-meta"><div>Seed<input id="expedition-seed-input" type="text" maxlength="48" spellcheck="false" /></div><div>Завершено<b id="hideout-runs">0</b></div><div>Постоянный доступ<b id="hideout-unlocks">нет</b></div><div>Лучшее время<b id="hideout-best-time">—</b></div><div>Stash<b id="hideout-stash">нет</b></div></div>
         <div class="expedition-lobby-actions"><button id="hideout-loadout" type="button">Открыть снаряжение</button></div>
+      </div>
+      <div id="hideout-campaign-panels" class="expedition-campaign-panels">
+        <div class="expedition-campaign-panel"><b>STASH INVENTORY</b><div id="hideout-stash-list" class="expedition-campaign-list"></div></div>
+        <div class="expedition-campaign-panel"><b>RECENT RUNS</b><div id="hideout-history-list" class="expedition-campaign-list"></div></div>
       </div>
       <div id="expedition-loadout-view">
         <div class="victory-kicker">LOADOUT / DEPLOYMENT</div>

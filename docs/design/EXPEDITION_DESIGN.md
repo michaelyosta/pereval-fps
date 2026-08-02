@@ -10,7 +10,7 @@ Death transitions through PlayerDead -> RunFailed -> Results. A failed critical 
 
 ## Run ownership
 
-RunConfig stores the display seed, difficulty, test mode, Watcher flag, generation attempt limit, and extraction duration. ActiveRun stores the generated map, objective instance, timer, threat, anomaly band, loot, stats, temporary skills, event state, extraction progress, and result. NoiseSystem, ThreatDirector, AnomalyLevel, and WatcherDirector are run-scoped services. CampaignState stores only persistent completion, unlocks, stash, and best time.
+RunConfig stores the display seed, difficulty, test mode, Watcher flag, generation attempt limit, and extraction duration. ActiveRun stores the generated map, objective instance, timer, threat, anomaly band, loot, stats, temporary skills, event state, extraction progress, encounter state, and result. NoiseSystem, ThreatDirector, AnomalyLevel, WatcherDirector, and EncounterDirector are run-scoped services. CampaignState stores persistent completion, unlocks, stash, best time, and the bounded recent-run history; temporary skills never cross a run boundary.
 
 ## Success
 
@@ -24,6 +24,12 @@ World generation selects deterministic optional event descriptors from eight eve
 
 Movement, sprinting, shots, loot, objectives, events, and extraction emit NoiseSystem events on the module graph. Intensity is attenuated through authored audio zones; noise raises threat and anomaly without revealing an exact position unless visual contact is set. WatcherDirector activates at a seeded anomaly/noise threshold from a safe candidate, then the runtime bot moves from that sampled position; it does not teleport to the player.
 
+## Navigation and pursuit
+
+World generation produces connector-aware main/objective/alternative-extraction routes. The planner validates connector type, blocked state, allowed categories, transition points, route cost, and next connector. Encounter candidates must be reachable through that planner, not merely present in the graph. Bots still use the existing collision-constrained local movement; a polygon nav mesh and long-range path following remain outside this vertical slice.
+
+EncounterDirector reserves a finite initial budget, then schedules dormant seeded enemy groups in response to threat, anomaly, loud noise, or extraction pressure. The main thread consumes the request through the real bot spawn pipeline. Expedition kills do not respawn the group, preserving a finite encounter economy.
+
 ## Deferred systems
 
-The current milestone intentionally keeps the whole generated world loaded, uses authored box colliders instead of a navigation mesh, and exposes a compact shelter rather than a full stash/map screen. ThreatDirector has a finite encounter scheduler and seeded enemy groups but does not yet spawn new encounter groups mid-run. Visual weapon models and audio are shared procedural adapters; replacing them with authored assets is deferred.
+The current milestone intentionally keeps the whole generated world loaded and uses authored box colliders rather than a polygon navigation mesh. Visual weapon models and audio are shared procedural adapters; replacing them with authored assets, code splitting, and draw-call-heavy decoration profiling are deferred.
