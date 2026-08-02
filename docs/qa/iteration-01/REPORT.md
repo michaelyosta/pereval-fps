@@ -1,6 +1,6 @@
 # Iteration 01 QA report
 
-Date: 2026-08-02  
+Date: 2026-08-02
 Branch: `codex/fps-correctness`
 
 ## Automated checks

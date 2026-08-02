@@ -1,7 +1,7 @@
 # Final QA report
 
-Date: 2026-08-02  
-Project: `pereval-fps`  
+Date: 2026-08-02
+Project: `pereval-fps`
 Branch: `codex/fps-correctness`
 
 ## Verified commands
