@@ -663,8 +663,9 @@ export function shoot(g, aimTarget) {
   const targets = [];
   const botsMod = g.services?.bots;
   const worldMod = g.services?.world;
+  const shootables = g.expeditionScene?.group ?? worldMod?.getShootables?.() ?? null;
   if (botsMod?.getGroup) { const bg = botsMod.getGroup(); if (bg) targets.push(bg); }
-  if (worldMod?.getShootables) { const sg = worldMod.getShootables(); if (sg) targets.push(sg); }
+  if (shootables) targets.push(shootables);
   else if (g.staticGroup) targets.push(g.staticGroup);
 
   _ray.set(_v1, dir);
@@ -677,13 +678,13 @@ export function shoot(g, aimTarget) {
   if (hit) {
     _v3.copy(hit.point);
     let blockedFromMuzzle = false;
-    if (!aimTarget && worldMod?.getShootables) {
+    if (!aimTarget && shootables) {
       _v4.subVectors(_v3, _muzzleWorld);
       const muzzleDistance = _v4.length();
       if (muzzleDistance > 0.01) {
         _v4.normalize();
         _ray.set(_muzzleWorld, _v4);
-        const muzzleHits = _ray.intersectObjects([worldMod.getShootables()], true);
+        const muzzleHits = _ray.intersectObjects([shootables], true);
         if (muzzleHits.length && muzzleHits[0].distance + 0.05 < muzzleDistance) {
           blockedFromMuzzle = true;
           hit = muzzleHits[0];

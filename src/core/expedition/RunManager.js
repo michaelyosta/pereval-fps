@@ -3,12 +3,14 @@ import { WorldGenerator } from '../../expedition/worldGenerator.js';
 import { ObjectiveDirector } from '../../expedition/objectives.js';
 import { ExtractionSystem } from '../../expedition/extraction.js';
 import { ThreatDirector } from '../../expedition/threatDirector.js';
-import { Inventory } from '../../expedition/inventory.js';
+import { Equipment, Inventory } from '../../expedition/inventory.js';
+import { WeaponRegistry } from '../../expedition/weapons.js';
 
 export class RunManager {
   constructor({ generator = new WorldGenerator(), campaign = null, saveSystem = null } = {}) {
     this.generator = generator;
     this.saveSystem = saveSystem;
+    this.weaponRegistry = new WeaponRegistry();
     this.state = RunState.Boot;
     this.run = null;
     this.objectiveDirector = null;
@@ -90,6 +92,17 @@ export class RunManager {
       this.run.objectiveDirector = this.objectiveDirector;
       this.run.threatDirector = this.threatDirector;
       this.run.objective = this.objectiveDirector.instance;
+      const weaponDefinition = this.weaponRegistry.get(config.primaryWeapon);
+      this.run.equipment = new Equipment();
+      this.run.equipment.equip(
+        {
+          id: weaponDefinition.id,
+          type: 'weapon',
+          metadata: { name: weaponDefinition.name, category: weaponDefinition.category },
+        },
+        'primary',
+      );
+      this.run.weapon = this.weaponRegistry.createState(weaponDefinition.id);
       this.run.inventory = new Inventory({ capacity: 12, weightLimit: 30 });
       for (const item of generatedWorld.startResources)
         this.run.inventory.add({ id: item.type, type: item.type, amount: 1, maxStack: 10, weight: 0.1 });
@@ -250,6 +263,11 @@ export class RunManager {
       this.campaign.completedRuns += 1;
       if (this.campaign.bestTime === null || this.run.elapsedSeconds < this.campaign.bestTime)
         this.campaign.bestTime = this.run.elapsedSeconds;
+      const reward = 'field-clearance';
+      if (!this.campaign.permanentUnlocks.includes(reward)) this.campaign.permanentUnlocks.push(reward);
+      this.run.permanentRewards.push(reward);
+    } else {
+      this.run.temporarySkills = [];
     }
     this.run.result = new RunResult({ status, reason, run: this.run, campaign: this.campaign });
     this.saveSystem?.save?.(this.campaign);
@@ -270,6 +288,14 @@ export class RunManager {
         ? {
             config: this.run.config,
             map: this.run.map,
+            loadout: { ...this.run.loadout },
+            weapon: this.run.weapon
+              ? {
+                  id: this.run.weapon.definition.id,
+                  ammo: this.run.weapon.ammo,
+                  reserve: this.run.weapon.reserve,
+                }
+              : null,
             elapsedSeconds: this.run.elapsedSeconds,
             threat: this.run.threat,
             loot: [...this.run.loot],

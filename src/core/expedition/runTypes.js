@@ -57,6 +57,7 @@ export class RunConfig {
   constructor(options = {}) {
     this.seed = RunSeed.from(options.seed ?? 'default');
     this.difficulty = options.difficulty ?? 'standard';
+    this.primaryWeapon = options.primaryWeapon ?? 'oblomok-7';
     this.testMode = options.testMode === true;
     this.watcher = options.watcher !== false;
     this.maxGenerationAttempts = Number.isInteger(options.maxGenerationAttempts)
@@ -114,6 +115,9 @@ export class ActiveRun {
     };
     this.temporarySkills = [];
     this.permanentRewards = [];
+    this.loadout = { primaryWeapon: config.primaryWeapon };
+    this.equipment = null;
+    this.weapon = null;
     this.result = null;
     this.objective = generatedWorld.objective;
     this.extraction = {

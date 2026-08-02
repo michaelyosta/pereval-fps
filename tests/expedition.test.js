@@ -86,6 +86,9 @@ describe('seeded expedition generation', () => {
     const assembler = new ThreeWorldAssembler(scene);
     const result = assembler.assemble(world);
     expect(result.moduleCount).toBe(world.modules.length);
+    expect(result.colliders.length).toBeGreaterThan(world.modules.length);
+    expect(result.colliders.every((collider) => collider.height > 0)).toBe(true);
+    expect(result.group.children.some((child) => child.userData.shootable)).toBe(true);
     expect(scene.getObjectByName('expeditionWorld')).toBeTruthy();
     assembler.dispose();
     expect(scene.getObjectByName('expeditionWorld')).toBeUndefined();
@@ -132,9 +135,24 @@ describe('expedition run lifecycle', () => {
     manager.playerDied('watcher');
     expect(manager.state).toBe(RunState.Results);
     expect(manager.run.result.status).toBe('failure');
-    expect(manager.run.result.temporarySkills).toEqual([{ id: 'quiet-step' }]);
+    expect(manager.run.result.temporarySkills).toEqual([]);
     expect(manager.campaign.permanentUnlocks).toEqual(['sidearm-license']);
     expect(manager.campaign.completedRuns).toBe(0);
+  });
+
+  it('stores the selected loadout and awards a permanent unlock on extraction', () => {
+    const manager = new RunManager();
+    manager.start();
+    manager.openHideout();
+    manager.openLoadout();
+    manager.beginRun({ seed: 'loadout', testMode: true, primaryWeapon: 'rifle' });
+    expect(manager.run.loadout.primaryWeapon).toBe('rifle');
+    expect(manager.run.weapon.definition.id).toBe('rifle');
+    manager.deploy();
+    manager.completeObjective();
+    manager.activateExtraction();
+    manager.tickExtraction(3, true);
+    expect(manager.campaign.permanentUnlocks).toContain('field-clearance');
   });
 
   it('requires objective steps in order and supports an alternate extraction point', () => {

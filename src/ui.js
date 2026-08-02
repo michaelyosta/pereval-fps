@@ -246,6 +246,7 @@ export function update(dt, _g) {
   }
 
   // ammo
+  hud.weaponName.textContent = g.state.weaponName;
   hud.ammoCur.textContent = g.state.reloading ? '—' : g.state.ammo;
   hud.ammoRes.textContent = g.state.reserve;
   hud.reloadHint.classList.toggle('on', g.state.reloading);

@@ -12,7 +12,15 @@ import { resolveCapsuleMotion, pointBlockedByCollider } from './core/collision.j
 
 // Зависимости приходят через g.services, чтобы боевой, мировой и UI-модули не образовывали цикл.
 let gRef = null;
-const getWorld = () => gRef?.services?.world || { getColliders: () => [], getShootables: () => null };
+const getWorld = () => {
+  const legacy = gRef?.services?.world || { getColliders: () => [], getShootables: () => null };
+  const expedition = gRef?.expeditionScene;
+  if (!expedition) return legacy;
+  return {
+    getColliders: () => expedition.colliders ?? [],
+    getShootables: () => expedition.group ?? legacy.getShootables?.() ?? null,
+  };
+};
 const sfx = (n, v) => gRef?.services?.ui?.sfx?.(n, v);
 
 // ============================================================
@@ -591,6 +599,32 @@ export function spawnBots(g, n = 8) {
     if (b.mesh && b.mesh.parent) b.mesh.parent.remove(b.mesh);
   }
   bots = [];
+  const generatedSpawns = g.expedition?.run?.map?.enemyGroups
+    ?.flatMap((enemyGroup) => {
+      const positions = [];
+      for (let index = 0; index < enemyGroup.count; index += 1) {
+        positions.push({
+          position: new THREE.Vector3(
+            enemyGroup.position.x + (index % 2) * 1.1,
+            0,
+            enemyGroup.position.z + Math.floor(index / 2) * 1.1,
+          ),
+          groupId: enemyGroup.id,
+          archetype: enemyGroup.archetype,
+        });
+      }
+      return positions;
+    })
+    ?.filter((candidate) => candidate.position.distanceTo(g.player.pos) > 10) ?? [];
+  if (generatedSpawns.length) {
+    for (const spawn of generatedSpawns.slice(0, Math.min(n, 12))) {
+      const bot = createBot(spawn.position);
+      bot.expeditionGroupId = spawn.groupId;
+      bot.archetype = spawn.archetype;
+      bots.push(bot);
+    }
+    return;
+  }
   const count = Math.max(1, n | 0);
   const used = [];
   for (let i = 0; i < count; i++) {

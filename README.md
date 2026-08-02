@@ -57,6 +57,7 @@ If Pointer Lock is unavailable, the game falls back to a normal mouse mode inste
 - Player shots validate the muzzle-to-impact segment so the weapon cannot shoot through nearby cover.
 - Player and bot movement share height-aware capsule collision with oriented world boxes and a small step offset.
 - Arena ends after five kills; expedition kills are statistics and do not end a run. Expedition success requires objective completion and a completed extraction.
+- Expedition module walls are generated from graph edges and feed player collision, bot movement/LOS, and player-shot blocking; legacy arena keeps its original world path.
 
 ## Architecture
 
@@ -87,9 +88,9 @@ npm run test:e2e         # Chromium smoke: boot, fire, pause, damage, kill, demo
 npm run benchmark        # writes docs/qa/final/benchmark.json and demo.png
 ```
 
-The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.99 FPS, 334.32 ms sampled frame time, 871 draw calls, 12,191 triangles, 37 resources, and 2.98 MB encoded resource bytes. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
+The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.71 FPS, 369.30 ms sampled frame time, 860 draw calls, 11,993 triangles, 39 resources, and 3.06 MB encoded resource bytes. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
 
-The build currently emits one main JavaScript chunk of about 632.19 kB minified and 169.81 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
+The build currently emits one main JavaScript chunk of about 641.69 kB minified and 172.58 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
 
 `npm audit --omit=dev --audit-level=high` is clean. The full development-tool audit currently reports five transitive Vite/Vitest/esbuild advisories; the available `npm audit fix --force` is a breaking upgrade, so it is intentionally not applied in this gameplay pass.
 
@@ -99,7 +100,7 @@ The runtime uses local CanvasTexture materials. Color maps are tagged `THREE.SRG
 
 ## Scope and limitations
 
-The expedition foundation is a compact vertical slice rather than a production multiplayer/AAA stack. There is no networking, content streaming, skeletal animation pipeline, baked lightmap, or external PBR asset library. The authored expedition graph, objective data, extraction points, loot placements, events, and skill rewards are deterministic by seed; legacy arena decoration remains a separate compatibility path. Headless browser performance is software-dependent; use the in-app debug overlay or a real browser on the target GPU for hardware decisions.
+The expedition foundation is a compact vertical slice rather than a production multiplayer/AAA stack. There is no networking, content streaming, skeletal animation pipeline, baked lightmap, or external PBR asset library. The authored expedition graph, objective data, extraction points, loot placements, events, enemy groups, selected loadout, and skill rewards are deterministic by seed; the hideout/loadout flow persists permanent campaign unlocks through `SaveSystem`, while temporary run skills are discarded on death. Legacy arena decoration remains a separate compatibility path. Headless browser performance is software-dependent; use the in-app debug overlay or a real browser on the target GPU for hardware decisions.
 
 See [AUDIT.md](AUDIT.md) for the original defect inventory and [docs/qa/final/REPORT.md](docs/qa/final/REPORT.md) for the final verification record.
 

@@ -55,12 +55,19 @@ function chooseWeighted(random, definitions, used) {
 }
 
 function chooseConnector(from, to) {
+  const dx = to.position.x - from.position.x;
+  const dz = to.position.z - from.position.z;
+  const fromDirection =
+    Math.abs(dx) >= Math.abs(dz) ? { x: dx >= 0 ? 1 : -1, z: 0 } : { x: 0, z: dz >= 0 ? 1 : -1 };
+  const toDirection = { x: -fromDirection.x, z: -fromDirection.z };
   const preferredFrom =
-    from.definition.connectors.find((item) => item.direction.x > 0 && !item.blocked) ??
-    from.definition.connectors.find((item) => !item.blocked);
+    from.definition.connectors.find(
+      (item) => item.direction.x === fromDirection.x && item.direction.z === fromDirection.z && !item.blocked,
+    ) ?? from.definition.connectors.find((item) => !item.blocked);
   const preferredTo =
-    to.definition.connectors.find((item) => item.direction.x < 0 && !item.blocked) ??
-    to.definition.connectors.find((item) => !item.blocked);
+    to.definition.connectors.find(
+      (item) => item.direction.x === toDirection.x && item.direction.z === toDirection.z && !item.blocked,
+    ) ?? to.definition.connectors.find((item) => !item.blocked);
   return { fromConnector: preferredFrom?.id, toConnector: preferredTo?.id };
 }
 
