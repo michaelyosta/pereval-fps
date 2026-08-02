@@ -19,6 +19,7 @@ import { getQualityPreset, QUALITY_PRESETS } from './config/graphics.js';
 import { RunManager } from './core/expedition/RunManager.js';
 import { ThreeWorldAssembler } from './expedition/threeWorldAssembler.js';
 import { SaveSystem } from './expedition/saveSystem.js';
+import { InteractionSystem, Interactable } from './expedition/interactions.js';
 
 const $ = (s) => document.querySelector(s);
 const PARAMS = new URLSearchParams(location.search);
@@ -96,6 +97,24 @@ const mods = { world: worldModule, combat: combatModule, bots: botsModule, ui: u
 const campaignStorage = (() => {
   try { return window.localStorage; } catch { return null; }
 })();
+function expeditionInteractionLOS(playerPosition, interactable) {
+  if (!g?.expeditionScene?.group || !interactable?.object) return true;
+  const origin = camera.getWorldPosition(new THREE.Vector3());
+  const target = new THREE.Vector3(interactable.position.x, interactable.position.y ?? 0.45, interactable.position.z);
+  const direction = target.sub(origin);
+  const distance = direction.length();
+  if (!distance) return true;
+  direction.normalize();
+  const ray = new THREE.Raycaster(origin, direction, 0, distance + 0.1);
+  const hits = ray.intersectObjects([g.expeditionScene.group], true);
+  if (!hits.length) return true;
+  let node = hits[0].object;
+  while (node) {
+    if (node === interactable.object || node.userData?.interactableId === interactable.id) return true;
+    node = node.parent;
+  }
+  return false;
+}
 const g = {
   renderer, scene, camera, composer, viewRoot,
   demo: DEMO,
@@ -103,13 +122,18 @@ const g = {
   expedition: EXPEDITION ? new RunManager({ saveSystem: new SaveSystem({ storage: campaignStorage }) }) : null,
   expeditionAssembler: EXPEDITION ? new ThreeWorldAssembler(scene) : null,
   expeditionScene: null,
+  expeditionInteractions: EXPEDITION
+    ? new InteractionSystem({ lineOfSight: expeditionInteractionLOS })
+    : null,
+  interactionInterrupted: false,
+  noiseAccumulator: 0,
   runSeed: RUN_SEED,
   sessionStarted: false,
   noLock: false,          // fallback: игра без захвата мыши (если pointer lock недоступен)
   clock: new THREE.Clock(),
   input: {
     forward: 0, strafe: 0, sprint: false, fire: false, ads: false,
-    reload: false, jump: false, interact: false, lookDX: 0, lookDY: 0
+    reload: false, jump: false, interact: false, heal: false, firePressed: false, lookDX: 0, lookDY: 0
   },
   settings: { sensitivity: 0.0022, invertY: false },
   state: {
@@ -163,10 +187,12 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
     },
     tickExtraction: (seconds = 1, inside = true) => g.expedition?.tickExtraction?.(seconds, inside) ?? false,
     addTemporarySkill: (id = 'steady-hands') => g.expedition?.addTemporarySkill?.({ id, source: 'debug' }) ?? false,
+    chooseSkill: (id = null) => g.expedition?.chooseSkill?.(id) ?? false,
     failRun: (reason = 'debug') => g.expedition?.playerDied?.(reason) ?? false,
     copySeed: () => window.navigator?.clipboard?.writeText(g.runSeed),
     shoot: () => mods.combat?.shoot(g, null),
     damagePlayer: (amount = 10) => g.damagePlayer(amount, { type: 'debug' }),
+    restartRun: () => { restartMatch(); return g.expedition?.snapshot?.(); },
     killNearestEnemy: () => {
       const bot = mods.bots?.getBots?.().find((candidate) => candidate.alive);
       if (!bot) return { killed: false };
@@ -191,6 +217,8 @@ window.addEventListener('keydown', (e) => {
   keys.add(e.code);
   if (e.code === 'KeyR') g.input.reload = true;
   if (e.code === 'KeyE') g.input.interact = true;
+  if (e.code === 'KeyH') g.input.heal = true;
+  if (e.code === 'KeyM' && g.expedition) toggleExpeditionMap();
   if (e.code === 'Space' && !g.demo) g.input.jump = true;
 });
 window.addEventListener('keyup', (e) => {
@@ -198,6 +226,7 @@ window.addEventListener('keyup', (e) => {
   if (e.code === 'KeyR') g.input.reload = false;
   if (e.code === 'Space') g.input.jump = false;
   if (e.code === 'KeyE') g.input.interact = false;
+  if (e.code === 'KeyH') g.input.heal = false;
 });
 window.addEventListener('mousemove', (e) => {
   if (document.pointerLockElement !== renderer.domElement && !g.noLock) return;
@@ -209,7 +238,7 @@ window.addEventListener('mousemove', (e) => {
 window.addEventListener('mousedown', (e) => {
   if (g.demo || !g.state.alive) return;
   if (document.pointerLockElement !== renderer.domElement && !g.noLock) return;
-  if (e.button === 0) g.input.fire = true;
+  if (e.button === 0) { g.input.fire = true; g.input.firePressed = true; }
   if (e.button === 2) g.input.ads = true;
 });
 window.addEventListener('mouseup', (e) => {
@@ -224,6 +253,13 @@ const settingsPanel = $('#settings-panel');
 const expeditionLobby = $('#expedition-lobby');
 const expeditionHideoutView = $('#expedition-hideout-view');
 const expeditionLoadoutView = $('#expedition-loadout-view');
+const skillChoice = $('#skill-choice');
+const skillChoiceOptions = $('#skill-choice-options');
+const expeditionMap = $('#expedition-map');
+
+function toggleExpeditionMap() {
+  expeditionMap?.classList.toggle('on');
+}
 
 function setPauseOverlay(visible) {
   if (pauseEl) pauseEl.style.display = visible ? 'flex' : 'none';
@@ -260,12 +296,18 @@ function requestGamePointerLock() {
 function refreshExpeditionHideout() {
   const campaign = g.expedition?.campaign;
   if (!campaign) return;
-  $('#hideout-seed').textContent = g.runSeed;
+  const seedInput = $('#expedition-seed-input');
+  if (seedInput) seedInput.value = g.runSeed;
   $('#hideout-runs').textContent = String(campaign.completedRuns);
   $('#hideout-unlocks').textContent = campaign.permanentUnlocks.length
     ? campaign.permanentUnlocks.join(', ')
     : 'нет';
   $('#hideout-best-time').textContent = campaign.bestTime === null ? '—' : `${campaign.bestTime.toFixed(1)}s`;
+  const stash = Object.entries(campaign.stash ?? {})
+    .filter(([, amount]) => amount > 0)
+    .map(([id, amount]) => `${id}×${amount}`)
+    .join(', ');
+  $('#hideout-stash').textContent = stash || 'нет';
 }
 
 function showExpeditionHideout() {
@@ -302,6 +344,31 @@ function applyExpeditionLoadout(run) {
   g.state.ammo = weapon.magazine;
   g.state.reserve = weapon.magazine * 4;
   g.state.reloading = false;
+}
+
+function showSkillChoice(options = []) {
+  if (!skillChoice || !skillChoiceOptions) return;
+  skillChoiceOptions.replaceChildren();
+  for (const option of options) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'skill-choice-card';
+    const name = document.createElement('b');
+    name.textContent = option.name;
+    const description = document.createElement('span');
+    description.textContent = `${option.category} · ${option.description}`;
+    button.append(name, description);
+    button.addEventListener('click', () => g.expedition?.chooseSkill(option.id));
+    skillChoiceOptions.append(button);
+  }
+  skillChoice.style.display = 'flex';
+  g.state.paused = true;
+  if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+}
+
+function hideSkillChoice(resume = true) {
+  if (skillChoice) skillChoice.style.display = 'none';
+  if (resume && g.sessionStarted && g.state.alive) requestGamePointerLock();
 }
 
 function restartMatch() {
@@ -358,9 +425,20 @@ function showVictory() {
   $('#victory').style.display = 'flex';
 }
 
-g.events.on('enemy:hit', ({ killed }) => {
-  if (killed && g.expedition) g.expedition.recordKill(1);
+g.events.on('enemy:hit', ({ killed, archetype }) => {
+  if (killed && g.expedition) g.expedition.recordKill(1, archetype);
   if (killed && !g.expedition && g.state.kills >= g.state.matchTarget) showVictory();
+});
+
+g.events.on('weapon:shot', ({ noise = 1 }) => {
+  if (!g.expedition?.run) return;
+  g.expedition.recordNoise({
+    kind: 'shot',
+    position: { x: g.player.pos.x, z: g.player.pos.z },
+    intensity: noise,
+    duration: 2,
+    visualContact: true,
+  });
 });
 
 $('#resume')?.addEventListener('click', requestGamePointerLock);
@@ -394,6 +472,7 @@ $('#expedition-next')?.addEventListener('click', () => {
   showExpeditionHideout();
 });
 $('#hideout-loadout')?.addEventListener('click', showExpeditionLoadout);
+$('#expedition-map-toggle')?.addEventListener('click', toggleExpeditionMap);
 $('#loadout-back')?.addEventListener('click', showExpeditionHideout);
 $('#loadout-deploy')?.addEventListener('click', () => {
   if (!startExpeditionRun()) return;
@@ -406,8 +485,10 @@ function startExpeditionRun() {
   if (g.expedition.state === 'MainMenu') g.expedition.openHideout();
   if (g.expedition.state === 'Hideout') g.expedition.openLoadout();
   if (g.expedition.state !== 'Loadout') return false;
+  const selectedSeed = $('#expedition-seed-input')?.value.trim() || g.runSeed;
+  g.runSeed = selectedSeed;
   const run = g.expedition.beginRun({
-    seed: g.runSeed,
+    seed: selectedSeed,
     difficulty: PARAMS.get('difficulty') || 'standard',
     testMode: PARAMS.get('testMode') === '1',
     watcher: PARAMS.get('watcher') !== '0',
@@ -430,6 +511,7 @@ function mountExpeditionWorld(run) {
   if (!g.expeditionAssembler || !run?.map) return;
   if (g.staticGroup) g.staticGroup.visible = false;
   g.expeditionScene = g.expeditionAssembler.assemble(run.map);
+  registerExpeditionInteractions(run, g.expeditionScene);
   const startNode = run.map.graph.getNode(run.map.graph.startNodeId);
   if (startNode) {
     g.player.spawn.set(startNode.position.x, 1.62, startNode.position.z + startNode.definition.size.z * 0.25);
@@ -438,12 +520,65 @@ function mountExpeditionWorld(run) {
   if (mods.bots?.spawnBots) mods.bots.spawnBots(g, 12);
 }
 
+function registerExpeditionInteractions(run, assembled) {
+  const interactions = g.expeditionInteractions;
+  if (!interactions) return;
+  interactions.clear();
+  for (const descriptor of assembled?.interactables ?? []) {
+    const isLoot = descriptor.type === 'loot';
+    const isObjective = descriptor.type === 'objective';
+    const isExtraction = descriptor.type === 'extraction';
+    const isEvent = descriptor.type === 'event';
+    interactions.register(new Interactable({
+      ...descriptor,
+      duration: isLoot && run.map.lootContainers.find((item) => item.id === descriptor.id)?.secured ? 1.2 : 0,
+      available: () => {
+        if (isLoot) return !run.map.lootContainers.find((item) => item.id === descriptor.id)?.opened;
+        if (isObjective) return ['Exploration', 'ObjectiveActive'].includes(g.expedition.state);
+        if (isExtraction) return g.expedition.state === 'ExtractionAvailable';
+        if (isEvent) return !run.eventDirector?.get(descriptor.id)?.resolved;
+        return false;
+      },
+      onInteract: () => {
+        if (isLoot) {
+          const result = g.expedition.collectLoot(descriptor.id);
+          if (result.ok) {
+            if (descriptor.object) descriptor.object.visible = false;
+            g.events.emit('loot:collected', result);
+          }
+          return result.ok ? result : false;
+        }
+        if (isObjective) {
+          const step = run.objective.steps[run.objective.currentStep];
+          if (!step || step.nodeId !== descriptor.nodeId) return false;
+          if (g.expedition.state === 'Exploration') g.expedition.startObjective();
+          return g.expedition.completeObjectiveStep(step.id);
+        }
+        if (isExtraction && g.expedition.state === 'ExtractionAvailable') {
+          g.expedition.activateExtraction();
+          return true;
+        }
+        if (isEvent) {
+          const result = g.expedition.resolveEvent(descriptor.id);
+          if (result.ok && descriptor.object) descriptor.object.visible = false;
+          if (result.ok) g.events.emit('event:resolved', result);
+          return result.ok ? result : false;
+        }
+        return false;
+      },
+    }));
+  }
+}
+
 function showExpeditionResults(result) {
   if (!g.expedition || !result) return;
   $('#expedition-results-title').textContent = result.status === 'success' ? 'RUN COMPLETE' : 'RUN FAILED';
   $('#expedition-result-status').textContent = result.status;
   $('#expedition-result-seed').textContent = result.seed ?? g.runSeed;
   $('#expedition-result-kills').textContent = String(result.stats?.kills ?? 0);
+  $('#expedition-result-time').textContent = `${Number(result.elapsedSeconds ?? 0).toFixed(1)}s`;
+  $('#expedition-result-modules').textContent = String(result.visitedModules?.length ?? 0);
+  $('#expedition-result-events').textContent = String(result.stats?.eventsResolved ?? 0);
   $('#expedition-next').textContent = result.status === 'success' ? 'Return to hideout' : 'Recover in hideout';
   $('#expedition-results').style.display = 'flex';
   expeditionLobby.style.display = 'none';
@@ -473,6 +608,13 @@ function interactWithExpedition() {
   const manager = g.expedition;
   const run = manager?.run;
   if (!manager || !run) return false;
+  if (g.expeditionInteractions) {
+    const result = g.expeditionInteractions.interact(
+      { x: g.player.pos.x, z: g.player.pos.z },
+      { run, moving: g.player.moveSpeed > 0.25 },
+    );
+    if (result.reason !== 'nothing-nearby') return result.ok;
+  }
   const module = nearestExpeditionModule();
   if (!module) return false;
   if (manager.state === 'Exploration') {
@@ -491,6 +633,15 @@ function interactWithExpedition() {
     return true;
   }
   return false;
+}
+
+function useExpeditionHealing() {
+  if (!g.expedition?.run || !g.state.alive || g.state.health >= g.state.maxHealth) return false;
+  const result = g.expedition.useHealing('medkit');
+  if (!result.ok) return false;
+  g.state.health = Math.min(g.state.maxHealth, g.state.health + result.amount);
+  g.events.emit('player:healed', result);
+  return true;
 }
 // старт по клику на баннер (баннер перекрывает canvas — вешаем обработчик на него)
 titleEl.addEventListener('click', () => {
@@ -565,7 +716,8 @@ function updatePlayer(dt) {
   if (len > 0) { fwd /= len; str /= len; }
 
   const sprinting = inp.sprint && fwd > 0 && !inp.ads && !g.state.reloading && g.state.alive;
-  const baseSpeed = ads > 0.5 ? 2.6 : (sprinting ? 6.9 : 4.3);
+  const weaponMovement = g.expedition?.run?.weapon?.definition?.movementMultiplier ?? 1;
+  const baseSpeed = (ads > 0.5 ? 2.6 : sprinting ? 6.9 : 4.3) * weaponMovement;
   const accel = 55, friction = 11;
 
   const sin = Math.sin(p.yaw), cos = Math.cos(p.yaw);
@@ -698,6 +850,7 @@ function hurtPlayer(dmg, source) {
       deathTimer = 3.0;
     }
   }
+  if (result.applied > 0) g.interactionInterrupted = true;
   return result;
 }
 g.damagePlayer = hurtPlayer;
@@ -728,8 +881,23 @@ function frame() {
   if (simDt > 0) g.state.time += simDt;
   if (g.expedition && simDt > 0 && g.expedition.run) {
     const extractionNodeId = g.expedition.run.extraction.nodeId;
-    g.expedition.tick(simDt, { insideExtraction: playerAtExpeditionNode(extractionNodeId) });
+    g.expedition.tick(simDt, {
+      insideExtraction: playerAtExpeditionNode(extractionNodeId),
+      playerPosition: { x: g.player.pos.x, z: g.player.pos.z },
+      playerNodeId: g.expedition.nodeForPosition({ x: g.player.pos.x, z: g.player.pos.z }),
+    });
     g.state.time = g.expedition.run.elapsedSeconds;
+    const nearbyModule = nearestExpeditionModule(12);
+    if (nearbyModule && !g.expedition.run.visitedModules.includes(nearbyModule.id)) {
+      g.expedition.run.visitedModules.push(nearbyModule.id);
+      g.expedition.emit({ type: 'module-visited', moduleId: nearbyModule.id });
+    }
+    g.expeditionInteractions?.tick(
+      simDt,
+      { x: g.player.pos.x, z: g.player.pos.z },
+      { run: g.expedition.run, moving: g.player.moveSpeed > 0.25, damaged: g.interactionInterrupted },
+    );
+    g.interactionInterrupted = false;
   }
   grainPass.uniforms.time.value = g.state.time;
 
@@ -742,6 +910,10 @@ function frame() {
     demo.update(simDt);
     g.player.bobPhase = 0;
   } else if (!g.state.paused) {
+    if (g.expedition && g.input.heal) {
+      useExpeditionHealing();
+      g.input.heal = false;
+    }
     if (g.state.alive) updatePlayer(dt);
     else if (deathTimer > 0) { deathTimer -= dt; if (deathTimer <= 0) respawn(); }
     // поворот камеры даже стоя (для прицеливания)
@@ -751,6 +923,22 @@ function frame() {
       interactWithExpedition();
       g.input.interact = false;
     }
+  }
+
+  if (g.expedition?.run && simDt > 0 && g.state.alive && g.player.moveSpeed > 0.25) {
+    g.noiseAccumulator += simDt;
+    if (g.noiseAccumulator >= 0.65) {
+      const sprinting = g.input.sprint && g.input.forward > 0;
+      g.expedition.recordNoise({
+        kind: sprinting ? 'sprint' : 'movement',
+        position: { x: g.player.pos.x, z: g.player.pos.z },
+        intensity: sprinting ? 1.15 : 0.42,
+        duration: 0.75,
+      });
+      g.noiseAccumulator = 0;
+    }
+  } else {
+    g.noiseAccumulator = 0;
   }
 
   if (mods.world && mods.world.update) mods.world.update(simDt, g);
@@ -776,6 +964,12 @@ async function boot() {
     g.expedition.start();
     g.expedition.onChange((event) => {
       if (event.type === 'run-finished') showExpeditionResults(event.result);
+      if (event.type === 'skill-offer') showSkillChoice(event.options);
+      if (event.type === 'skill-selected') hideSkillChoice();
+      if (event.type === 'watcher-activated') {
+        mods.bots?.activateWatcher?.(g, event.candidateId);
+        g.events.emit('watcher:activated', event);
+      }
     });
   }
   if (mods.world && mods.world.init) mods.world.init(g);

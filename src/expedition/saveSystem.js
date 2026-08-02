@@ -25,6 +25,25 @@ export class SaveSystem {
     return snapshot;
   }
 
+  export(campaign) {
+    return JSON.stringify(this.serialize(campaign));
+  }
+
+  import(raw) {
+    const campaign = this.load(raw);
+    this.save(campaign);
+    return campaign;
+  }
+
+  reset() {
+    try {
+      this.storage?.removeItem?.(this.key);
+    } catch {
+      // Storage is optional and may be unavailable in private browsing.
+    }
+    return new CampaignState();
+  }
+
   load(raw = null) {
     let parsed = raw;
     try {

@@ -36,6 +36,14 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
   expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().state)).toBe(
     'ExtractionAvailable',
   );
+  const skillId = await page.evaluate(
+    () => window.__PEREVAL_DEBUG__?.getRunState?.().run?.skillOptions?.[0]?.id,
+  );
+  expect(skillId).toBeTruthy();
+  await page.evaluate((id) => window.__PEREVAL_DEBUG__?.chooseSkill?.(id), skillId);
+  expect(
+    await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().run?.temporarySkills?.length),
+  ).toBe(1);
   await page.evaluate(() => window.__PEREVAL_DEBUG__?.startExtraction?.());
   await page.evaluate(() => window.__PEREVAL_DEBUG__?.tickExtraction?.(3, true));
   expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().state)).toBe('Results');

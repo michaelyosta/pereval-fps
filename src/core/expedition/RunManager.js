@@ -5,17 +5,31 @@ import { ExtractionSystem } from '../../expedition/extraction.js';
 import { ThreatDirector } from '../../expedition/threatDirector.js';
 import { Equipment, Inventory } from '../../expedition/inventory.js';
 import { WeaponRegistry } from '../../expedition/weapons.js';
+import { ItemRegistry } from '../../expedition/loot.js';
+import { SkillRegistry } from '../../expedition/skills.js';
+import { NoiseSystem } from '../../expedition/noise.js';
+import { AnomalyLevel } from '../../expedition/anomalyLevel.js';
+import { WatcherDirector } from '../../expedition/watcher.js';
+import { EventDirector } from '../../expedition/events.js';
 
 export class RunManager {
   constructor({ generator = new WorldGenerator(), campaign = null, saveSystem = null } = {}) {
     this.generator = generator;
     this.saveSystem = saveSystem;
     this.weaponRegistry = new WeaponRegistry();
+    this.itemRegistry = new ItemRegistry();
+    this.skillRegistry = new SkillRegistry();
     this.state = RunState.Boot;
     this.run = null;
     this.objectiveDirector = null;
     this.extraction = null;
     this.threatDirector = null;
+    this.noiseSystem = null;
+    this.anomalyLevel = null;
+    this.watcher = null;
+    this.eventDirector = null;
+    this.noiseSequence = 0;
+    this.lastNoiseId = null;
     this.campaign = campaign
       ? campaign instanceof CampaignState
         ? campaign
@@ -89,8 +103,20 @@ export class RunManager {
         ],
       });
       this.threatDirector = new ThreatDirector({ seed: config.seed.display + ':threat' });
+      this.noiseSystem = new NoiseSystem({ graph: generatedWorld.graph });
+      this.anomalyLevel = new AnomalyLevel({ seed: config.seed.display + ':anomaly' });
+      this.watcher = new WatcherDirector({
+        seed: config.seed.display + ':watcher',
+        enabled: config.watcher,
+      });
+      this.eventDirector = new EventDirector(generatedWorld.events);
+      this.watcher.onEvent((event) => this.emit(event));
       this.run.objectiveDirector = this.objectiveDirector;
       this.run.threatDirector = this.threatDirector;
+      this.run.noiseSystem = this.noiseSystem;
+      this.run.anomalyLevel = this.anomalyLevel;
+      this.run.watcher = this.watcher;
+      this.run.eventDirector = this.eventDirector;
       this.run.objective = this.objectiveDirector.instance;
       const weaponDefinition = this.weaponRegistry.get(config.primaryWeapon);
       this.run.equipment = new Equipment();
@@ -103,9 +129,25 @@ export class RunManager {
         'primary',
       );
       this.run.weapon = this.weaponRegistry.createState(weaponDefinition.id);
+      this.run.skillOptions = [];
+      this.run.skillChoiceOpen = false;
       this.run.inventory = new Inventory({ capacity: 12, weightLimit: 30 });
-      for (const item of generatedWorld.startResources)
-        this.run.inventory.add({ id: item.type, type: item.type, amount: 1, maxStack: 10, weight: 0.1 });
+      for (const item of generatedWorld.startResources) {
+        const definition = this.itemRegistry.get(item.itemId ?? item.type);
+        this.run.inventory.add(definition.toInventoryItem(item.amount ?? 1));
+      }
+      if (!this.run.inventory.has('medkit'))
+        this.run.inventory.add(this.itemRegistry.get('bandage').toInventoryItem(1));
+      const ammoItemId =
+        {
+          pistol: 'pistol-ammo',
+          rifle: 'rifle-ammo',
+          shell: 'shell',
+          anomalous: 'anomaly-charge',
+        }[weaponDefinition.reserveType] ?? 'rifle-ammo';
+      if (!this.run.inventory.has(ammoItemId))
+        this.run.inventory.add(this.itemRegistry.get(ammoItemId).toInventoryItem(10));
+      this.run.weapon.reserve = this.run.inventory.count(ammoItemId);
       this.emit({
         type: 'run-generated',
         seed: config.seed.display,
@@ -128,7 +170,7 @@ export class RunManager {
     return this.run;
   }
 
-  tick(seconds, { insideExtraction = true } = {}) {
+  tick(seconds, { insideExtraction = true, playerPosition = null, playerNodeId = null } = {}) {
     if (!this.run || !Number.isFinite(seconds) || seconds <= 0) return;
     if (
       [
@@ -140,8 +182,144 @@ export class RunManager {
     ) {
       this.run.elapsedSeconds += seconds;
       this.threatDirector?.update(seconds);
+      this.noiseSystem?.update(seconds);
+      const activeNoise = this.lastNoiseId ? this.noiseSystem?.events.get(this.lastNoiseId) : null;
+      this.anomalyLevel?.update(seconds, {
+        threat: this.threatDirector?.threat ?? this.run.threat,
+        inAnomaly: this.run.objective?.type === 'extract-sample' && this.state === RunState.ObjectiveActive,
+      });
+      this.watcher?.update(seconds, {
+        anomaly: this.anomalyLevel?.value ?? 0,
+        noise: activeNoise,
+        playerPosition,
+        playerNodeId,
+      });
+      this.run.threat = this.threatDirector?.threat ?? this.run.threat;
+      this.run.anomaly = this.anomalyLevel?.value ?? this.run.anomaly;
+      this.run.anomalyBand = this.anomalyLevel?.band ?? this.run.anomalyBand;
+      this.run.watcherState = this.watcher?.state ?? this.run.watcherState;
+      for (const skill of this.run.temporarySkills) {
+        if (Number.isFinite(skill.remaining)) skill.remaining = Math.max(0, skill.remaining - seconds);
+      }
+      this.run.temporarySkills = this.run.temporarySkills.filter((skill) => skill.remaining !== 0);
     }
     if (this.state === RunState.Extracting) this.tickExtraction(seconds, insideExtraction);
+  }
+
+  nodeForPosition(position) {
+    if (!this.run?.map?.graph || !position) return null;
+    let nearest = null;
+    let nearestDistance = Infinity;
+    for (const [id, record] of this.run.map.graph.nodes) {
+      const node = record.instance;
+      const distance = Math.hypot(position.x - node.position.x, position.z - node.position.z);
+      if (distance < nearestDistance) {
+        nearest = id;
+        nearestDistance = distance;
+      }
+    }
+    return nearest;
+  }
+
+  recordNoise({
+    kind = 'movement',
+    nodeId = null,
+    position = null,
+    intensity = 1,
+    duration = 1,
+    visualContact = false,
+  } = {}) {
+    if (!this.run || !this.noiseSystem) return new Map();
+    const id = `noise-${this.noiseSequence++}`;
+    const resolvedNodeId = nodeId ?? this.nodeForPosition(position) ?? this.run.map.graph.startNodeId;
+    const event = {
+      id,
+      kind,
+      nodeId: resolvedNodeId,
+      position,
+      intensity,
+      duration,
+      visualContact,
+    };
+    const signals = this.noiseSystem.emit(event);
+    this.lastNoiseId = id;
+    this.run.stats.noiseEvents += 1;
+    const movementNoiseMultiplier = ['movement', 'sprint'].includes(kind)
+      ? (this.run.temporarySkills.find((skill) => skill.id === 'quiet-step')?.modifier
+          ?.movementNoiseMultiplier ?? 1)
+      : 1;
+    const effectiveIntensity = intensity * movementNoiseMultiplier;
+    const anomalyGain =
+      kind === 'shot'
+        ? effectiveIntensity * 1.4
+        : kind === 'anomaly'
+          ? effectiveIntensity * 1.1
+          : effectiveIntensity * 0.18;
+    this.anomalyLevel?.add(anomalyGain, kind);
+    this.threatDirector?.addThreat(
+      Math.min(5, effectiveIntensity * (kind === 'shot' ? 1.25 : 0.15)),
+      `noise:${kind}`,
+    );
+    this.run.threat = this.threatDirector?.threat ?? this.run.threat;
+    this.run.anomaly = this.anomalyLevel?.value ?? this.run.anomaly;
+    this.run.anomalyBand = this.anomalyLevel?.band ?? this.run.anomalyBand;
+    this.emit({ type: 'noise-emitted', event, signals });
+    return signals;
+  }
+
+  consumeWeaponAmmo(amount = 1) {
+    if (!this.run?.weapon) return false;
+    const ammoItemId =
+      {
+        pistol: 'pistol-ammo',
+        rifle: 'rifle-ammo',
+        shell: 'shell',
+        anomalous: 'anomaly-charge',
+      }[this.run.weapon.definition.reserveType] ?? 'rifle-ammo';
+    return this.run.inventory?.remove(ammoItemId, amount, { force: true })?.ok ?? false;
+  }
+
+  resolveEvent(eventId) {
+    if (!this.run || !this.eventDirector) return { ok: false, reason: 'no-run' };
+    const preview = this.eventDirector.preview(eventId);
+    if (!preview) return { ok: false, reason: 'already-resolved' };
+    for (const reward of preview.rewards) {
+      const definition = this.itemRegistry.get(reward.itemId);
+      const availability = this.run.inventory.canAdd(
+        definition.toInventoryItem(reward.amount),
+        reward.amount,
+      );
+      if (!availability.ok) return { ok: false, reason: availability.reason, eventId };
+    }
+    const event = this.eventDirector.resolve(eventId);
+    const collected = [];
+    for (const reward of event.rewards) {
+      const definition = this.itemRegistry.get(reward.itemId);
+      const item = definition.toInventoryItem(reward.amount);
+      this.run.inventory.add(item, reward.amount);
+      this.run.loot.push({
+        id: item.id,
+        type: item.type,
+        amount: reward.amount,
+        metadata: { ...item.metadata },
+      });
+      collected.push({ id: item.id, amount: reward.amount });
+    }
+    this.run.stats.eventsResolved += 1;
+    this.run.threat = Math.max(0, Math.min(100, this.run.threat + event.threat));
+    this.threatDirector?.addThreat(event.threat, `event:${event.type}`);
+    this.anomalyLevel?.add(Math.max(0, event.anomaly), `event:${event.type}`);
+    if (event.recovery) this.threatDirector?.startRecovery(undefined, `event:${event.type}`);
+    this.recordNoise({
+      kind: `event:${event.type}`,
+      nodeId: event.nodeId,
+      position: this.run.map.graph.getNode(event.nodeId)?.position,
+      intensity: event.noise,
+      duration: 1.2,
+    });
+    if (event.skill) this.offerSkillChoice(`event:${event.type}`);
+    this.emit({ type: 'event-resolved', eventId, eventType: event.type, items: collected });
+    return { ok: true, eventId, type: event.type, items: collected };
   }
 
   startObjective() {
@@ -158,16 +336,39 @@ export class RunManager {
     const objective = this.run.objective;
     const step = objective.steps[objective.currentStep];
     if (!step || (stepId && step.id !== stepId)) return false;
+    if (stepId) {
+      const requiredItems =
+        step.id === 'activate-generator' ? ['fuel', 'fuse'] : step.id === 'take-sample' ? ['sample'] : [];
+      if (requiredItems.length && !requiredItems.some((itemId) => this.run.inventory?.has(itemId)))
+        return false;
+      for (const itemId of requiredItems) {
+        if (this.run.inventory?.has(itemId)) {
+          this.run.inventory.remove(itemId, 1, { force: true });
+          break;
+        }
+      }
+    }
     const completed = this.objectiveDirector?.completeStep({ stepId, force: !stepId });
     if (!completed) return false;
     this.run.stats.objectivesCompleted += 1;
     this.run.threat = Math.min(100, this.run.threat + (step.threat || 8));
-    this.threatDirector?.addThreat(step.threat || 8);
+    this.threatDirector?.addThreat(step.threat || 8, 'objective-step');
+    this.anomalyLevel?.add(step.threat || 8, 'objective');
+    this.run.anomaly = this.anomalyLevel?.value ?? this.run.anomaly;
+    this.run.anomalyBand = this.anomalyLevel?.band ?? this.run.anomalyBand;
     this.emit({ type: 'objective-step-completed', step });
+    this.recordNoise({
+      kind: 'objective',
+      nodeId: step.nodeId,
+      position: this.run.map.graph.getNode(step.nodeId)?.position,
+      intensity: step.id.includes('hold') ? 2.8 : 1.4,
+      duration: step.id.includes('hold') ? 3 : 1,
+    });
     if (this.objectiveDirector?.isComplete()) {
       this.run.extraction.available = true;
       this.extraction?.unlock();
       this.transition(RunState.ExtractionAvailable, 'objective-complete');
+      this.offerSkillChoice('objective');
       this.emit({ type: 'extraction-available', nodeId: this.run.extraction.nodeId });
     }
     return true;
@@ -179,10 +380,12 @@ export class RunManager {
     return this.run.objective;
   }
 
-  recordKill(count = 1) {
+  recordKill(count = 1, archetype = null) {
     if (!this.run) return;
     this.run.stats.kills += Math.max(0, count);
-    this.emit({ type: 'kill-recorded', count });
+    if (archetype)
+      this.run.stats.killsByType[archetype] = (this.run.stats.killsByType[archetype] ?? 0) + count;
+    this.emit({ type: 'kill-recorded', count, archetype });
   }
 
   addLoot(item) {
@@ -194,16 +397,109 @@ export class RunManager {
     return true;
   }
 
+  collectLoot(containerId) {
+    if (!this.run || !this.run.inventory) return { ok: false, reason: 'no-run' };
+    const container = this.run.map.lootContainers?.find((item) => item.id === containerId);
+    if (!container || container.opened) return { ok: false, reason: 'already-open' };
+    const preview = container.preview?.(this.itemRegistry) ?? [];
+    for (const item of preview) {
+      const availability = this.run.inventory.canAdd(item, item.amount);
+      if (!availability.ok) return { ok: false, reason: availability.reason, id: containerId };
+    }
+    const items = container.open(this.itemRegistry);
+    const collected = [];
+    for (const item of items) {
+      const result = this.run.inventory.add(item, item.amount);
+      if (!result.ok) return { ok: false, reason: result.reason, id: containerId };
+      const collectedItem = {
+        id: item.id,
+        type: item.type,
+        amount: item.amount,
+        metadata: { ...item.metadata },
+      };
+      this.run.loot.push(collectedItem);
+      collected.push(collectedItem);
+      if (item.type === 'ammo' && item.metadata?.ammoType === this.run.weapon?.definition?.reserveType)
+        this.run.weapon.reserve += item.amount;
+    }
+    this.run.stats.lootCollected += collected.length;
+    this.emit({ type: 'loot-collected', containerId, items: collected });
+    this.recordNoise({
+      kind: container.secured ? 'forced-loot' : 'loot',
+      nodeId: container.nodeId,
+      position: container.position,
+      intensity: container.secured ? 2.4 : 0.7,
+      duration: container.secured ? 1.5 : 0.6,
+    });
+    return { ok: true, id: containerId, items: collected };
+  }
+
+  useHealing(itemId = 'medkit') {
+    if (!this.run?.inventory) return { ok: false, reason: 'no-run', amount: 0 };
+    const definition = this.itemRegistry.get(itemId);
+    if (!definition.heal) return { ok: false, reason: 'not-healing', amount: 0 };
+    const consumed = this.run.inventory.consume(itemId, 1);
+    if (!consumed.ok) return { ok: false, reason: consumed.reason, amount: 0 };
+    this.run.stats.healingUsed += 1;
+    const healingMultiplier =
+      this.run.temporarySkills.find((skill) => skill.id === 'field-medic')?.modifier?.healingMultiplier ?? 1;
+    const amount = Math.round(definition.heal * healingMultiplier);
+    this.emit({ type: 'healing-used', itemId, amount });
+    return { ok: true, itemId, amount };
+  }
+
   addTemporarySkill(skill) {
     if (!this.run || !skill) return false;
-    if (!this.run.temporarySkills.some((item) => item.id === skill.id))
-      this.run.temporarySkills.push({ ...skill });
+    const definition = this.skillRegistry.get(skill.id);
+    if (!this.run.temporarySkills.some((item) => item.id === skill.id)) {
+      this.run.temporarySkills.push({
+        id: definition.id,
+        source: skill.source ?? 'reward',
+        remaining: definition.duration,
+        modifier: { ...definition.modifier },
+      });
+    }
+    return true;
+  }
+
+  offerSkillChoice(source = 'reward') {
+    if (!this.run || this.run.skillChoiceOpen) return this.run?.skillOptions ?? [];
+    const generated = (this.run.map.temporarySkills ?? [])
+      .map((skill) => this.skillRegistry.get(skill.id))
+      .filter(Boolean);
+    const pool = [...generated, ...this.skillRegistry.all()].filter(
+      (definition, index, list) => list.findIndex((candidate) => candidate.id === definition.id) === index,
+    );
+    const available = pool.filter(
+      (definition) => !this.run.temporarySkills.some((skill) => skill.id === definition.id),
+    );
+    this.run.skillOptions = available.slice(0, 3).map((definition) => ({
+      id: definition.id,
+      name: definition.name,
+      category: definition.category,
+      description: definition.description,
+      source,
+    }));
+    this.run.skillChoiceOpen = this.run.skillOptions.length > 0;
+    if (this.run.skillChoiceOpen) this.emit({ type: 'skill-offer', options: this.run.skillOptions, source });
+    return this.run.skillOptions;
+  }
+
+  chooseSkill(skillId = null) {
+    if (!this.run?.skillChoiceOpen) return false;
+    const option = this.run.skillOptions.find((item) => item.id === skillId) ?? this.run.skillOptions[0];
+    if (!option) return false;
+    this.addTemporarySkill({ id: option.id, source: option.source });
+    this.run.skillChoiceOpen = false;
+    this.run.skillOptions = [];
+    this.emit({ type: 'skill-selected', skill: option });
     return true;
   }
 
   activateExtraction(pointId = 'primary') {
     if (this.state !== RunState.ExtractionAvailable)
       throw new Error(`Cannot activate extraction from ${this.state}`);
+    if (this.run.skillChoiceOpen) this.chooseSkill();
     const point = this.extraction?.begin(pointId);
     if (!point) throw new Error('Unknown extraction point: ' + pointId);
     this.run.extraction.active = true;
@@ -211,6 +507,13 @@ export class RunManager {
     this.run.extraction.duration = point.duration;
     this.run.extraction.nodeId = point.nodeId;
     this.transition(RunState.Extracting, 'extraction-started');
+    this.recordNoise({
+      kind: 'extraction',
+      nodeId: point.nodeId,
+      position: this.run.map.graph.getNode(point.nodeId)?.position,
+      intensity: point.mode === 'noisy' ? 3.5 : 1.8,
+      duration: point.duration,
+    });
     this.emit({ type: 'extraction-started', duration: this.run.extraction.duration });
   }
 
@@ -266,8 +569,18 @@ export class RunManager {
       const reward = 'field-clearance';
       if (!this.campaign.permanentUnlocks.includes(reward)) this.campaign.permanentUnlocks.push(reward);
       this.run.permanentRewards.push(reward);
+      for (const item of this.run.inventory?.items ?? []) {
+        if (item.quest) continue;
+        this.campaign.stash[item.id] = (this.campaign.stash[item.id] ?? 0) + item.amount;
+      }
     } else {
+      const protectedItem = this.run.inventory?.items?.find((item) => item.protectedItem);
+      if (protectedItem) {
+        this.campaign.stash[protectedItem.id] = (this.campaign.stash[protectedItem.id] ?? 0) + 1;
+      }
       this.run.temporarySkills = [];
+      this.run.loot = [];
+      if (this.run.inventory) this.run.inventory.items = [];
     }
     this.run.result = new RunResult({ status, reason, run: this.run, campaign: this.campaign });
     this.saveSystem?.save?.(this.campaign);
@@ -298,10 +611,18 @@ export class RunManager {
               : null,
             elapsedSeconds: this.run.elapsedSeconds,
             threat: this.run.threat,
+            threatDirector: this.threatDirector?.snapshot?.() ?? null,
+            anomaly: this.run.anomaly,
+            anomalyBand: this.run.anomalyBand,
+            watcher: this.watcher?.snapshot?.() ?? null,
+            events: this.eventDirector?.snapshot?.() ?? [],
             loot: [...this.run.loot],
             stats: { ...this.run.stats },
+            visitedModules: [...this.run.visitedModules],
             temporarySkills: [...this.run.temporarySkills],
             inventory: this.run.inventory?.toJSON?.() ?? null,
+            skillOptions: [...this.run.skillOptions],
+            skillChoiceOpen: this.run.skillChoiceOpen,
             extraction: { ...this.run.extraction },
             objective: this.run.objective,
             result: this.run.result,

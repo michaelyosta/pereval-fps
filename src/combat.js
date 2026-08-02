@@ -601,6 +601,10 @@ function applySpread(dir, angle) {
 export function reload(g) {
   if (!g || g.state.reloading || !g.state.alive) return;
   if (g.state.ammo >= g.state.magSize || g.state.reserve <= 0) return;
+  const weaponState = g.expedition?.run?.weapon;
+  const reloadMultiplier = g.expedition?.run?.temporarySkills?.find((skill) => skill.id === 'fast-reload')
+    ?.modifier?.reloadMultiplier ?? 1;
+  if (weaponState && !weaponState.startReload(reloadMultiplier)) return;
   g.state.reloading = true;
   reloadT = 0;
   const ui = g.services?.ui;
@@ -628,13 +632,27 @@ export function shoot(g, aimTarget) {
   if (fireCooldown > 0) return;
   if (g.state.ammo <= 0) { dryFire(g); return; }
 
-  g.state.ammo--;
+  const weaponState = g.expedition?.run?.weapon;
+  const weapon = weaponState?.definition;
+  const fireResult = weaponState?.fire();
+  if (weaponState && !fireResult?.fired) {
+    if (fireResult.reason === 'empty') dryFire(g);
+    return;
+  }
+  if (!weaponState) g.state.ammo--;
+  else {
+    g.state.ammo = weaponState.ammo;
+    g.state.reserve = weaponState.reserve;
+  }
   g.state.shots = (g.state.shots || 0) + 1;
-  fireCooldown = FIRE_INTERVAL;
+  fireCooldown = weapon ? 60 / weapon.fireRate : FIRE_INTERVAL;
+  const activeSkills = g.expedition?.run?.temporarySkills ?? [];
+  const spreadMultiplier = activeSkills.find((skill) => skill.id === 'steady-hands')?.modifier?.spreadMultiplier ?? 1;
+  const recoilMultiplier = activeSkills.find((skill) => skill.id === 'deep-breath')?.modifier?.recoilMultiplier ?? 1;
 
   // отдача: импульсы в g.recoil (main сам гасит) + подброс viewRoot
-  g.recoil.pitch += 0.014;
-  g.recoil.y += 0.02;
+  g.recoil.pitch += (weapon?.recoil?.pitch ?? 0.014) * recoilMultiplier;
+  g.recoil.y += (weapon?.recoil?.yaw ?? 0.02) * recoilMultiplier;
   kick = Math.min(1, kick + 0.6);
 
   // разброс: растёт при стрельбе/движении, падает в ADS
@@ -643,7 +661,7 @@ export function shoot(g, aimTarget) {
   const base = adsAmt > 0.5 ? 0.0011 : 0.0042;
   const move = (g.player.moveSpeed || 0) * 0.0007;
   const air = g.player.onGround ? 0 : 0.0035;
-  const spread = base + move + air + spreadAccum;
+  const spread = (Math.max(base, weapon?.spread ?? 0) + move + air + spreadAccum) * spreadMultiplier;
   if (g.debug) { g.debug.spread = spread; g.debug.recoil = g.recoil.pitch; }
 
   // направление: из камеры, либо на aimTarget (demo)
@@ -659,7 +677,8 @@ export function shoot(g, aimTarget) {
   muzzleAnchor.getWorldPosition(_muzzleWorld);
 
   // рейкаст по ботам и статике
-  _v3.copy(_v1).addScaledVector(dir, TRACER_MAX_DIST);
+  const shotRange = weapon?.range ?? TRACER_MAX_DIST;
+  _v3.copy(_v1).addScaledVector(dir, shotRange);
   const targets = [];
   const botsMod = g.services?.bots;
   const worldMod = g.services?.world;
@@ -700,15 +719,43 @@ export function shoot(g, aimTarget) {
     }
     if (bot && !blockedFromMuzzle && botsMod?.applyDamage) {
       const headshot = hit.point.y >= bot.mesh.position.y + 1.42;
-      const damage = headshot ? DMG * 2 : DMG;
+      const distance = _v1.distanceTo(hit.point);
+      const baseDamage = weapon?.damageAt?.(distance) ?? weapon?.damage ?? DMG;
+      const damage = headshot ? baseDamage * 2 : baseDamage;
       const res = botsMod.applyDamage(g, bot, damage, dir, hit.point, { headshot });
       const killed = !!(res && res.killed);
       g.state.hits = (g.state.hits || 0) + 1;
       if (headshot) g.state.headshots = (g.state.headshots || 0) + 1;
-      g.events?.emit('enemy:hit', { damage, killed, headshot });
+      g.events?.emit('enemy:hit', { damage, killed, headshot, archetype: bot.archetype });
     } else {
       spawnImpact(hit.point, dir); // статика: искры + пыль
     }
+  }
+
+  // Shotgun pellets use independent rays, so close-range spread is meaningful rather than
+  // merely changing the tracer direction of a single projectile.
+  const pelletCount = Math.max(1, fireResult?.pellets ?? weapon?.pellets ?? 1);
+  for (let pellet = 1; pellet < pelletCount; pellet += 1) {
+    const pelletDir = _v4.copy(dir);
+    applySpread(pelletDir, (weapon?.spread ?? 0.08) * 0.72);
+    _ray.set(_v1, pelletDir);
+    const pelletHit = targets.length ? _ray.intersectObjects(targets, true)[0] : null;
+    if (!pelletHit) continue;
+    let node = pelletHit.object;
+    let pelletBot = null;
+    while (node) {
+      if (node.userData?.bot) { pelletBot = node.userData.bot; break; }
+      node = node.parent;
+    }
+    if (!pelletBot || !botsMod?.applyDamage) continue;
+    const headshot = pelletHit.point.y >= pelletBot.mesh.position.y + 1.42;
+    const baseDamage = weapon?.damageAt?.(_v1.distanceTo(pelletHit.point)) ?? weapon?.damage ?? DMG;
+    const damage = headshot ? baseDamage * 2 : baseDamage;
+    const result = botsMod.applyDamage(g, pelletBot, damage, pelletDir, pelletHit.point, { headshot });
+    const killed = !!result?.killed;
+    g.state.hits = (g.state.hits || 0) + 1;
+    if (headshot) g.state.headshots = (g.state.headshots || 0) + 1;
+    g.events?.emit('enemy:hit', { damage, killed, headshot, archetype: pelletBot.archetype });
   }
 
   // FX выстрела
@@ -717,7 +764,7 @@ export function shoot(g, aimTarget) {
   spawnMuzzleLight();
   spawnCasing();
 
-  g.events?.emit('weapon:shot', { ammo: g.state.ammo });
+  g.events?.emit('weapon:shot', { ammo: g.state.ammo, noise: fireResult?.noise ?? weapon?.noise ?? 1 });
   const ui = g.services?.ui;
   if (ui?.sfx) ui.sfx('shoot', 1);
 
@@ -797,13 +844,20 @@ export function update(dt, _g) {
   if (!g) return;
   if (g.debug) g.debug.recoil = g.recoil.pitch;
   fireCooldown -= dt;
+  const expeditionWeapon = g.expedition?.run?.weapon;
+  const reserveBeforeTick = expeditionWeapon?.reserve ?? 0;
+  expeditionWeapon?.tick(dt);
+  const movedFromReserve = reserveBeforeTick - (expeditionWeapon?.reserve ?? reserveBeforeTick);
+  if (movedFromReserve > 0) g.expedition?.consumeWeaponAmmo?.(movedFromReserve);
 
   // перезарядка по R (main даёт одноразовый импульс true)
   if (g.input && g.input.reload) { g.input.reload = false; reload(g); }
 
   // автоогонь
+  const semiAutomatic = expeditionWeapon?.definition.fireMode === 'semi';
   if (!g.demo && !g.state.paused && g.state.alive && !g.state.reloading &&
-      g.input.fire && fireCooldown <= 0) {
+      g.input.fire && fireCooldown <= 0 && (!semiAutomatic || g.input.firePressed)) {
+    g.input.firePressed = false;
     if (g.state.ammo > 0) shoot(g, null);
     else dryFire(g);
   }
@@ -811,7 +865,20 @@ export function update(dt, _g) {
   // прогресс перезарядки
   if (g.state.reloading) {
     reloadT += dt;
-    if (reloadT >= RELOAD_DUR) finishReload();
+    const weaponState = g.expedition?.run?.weapon;
+    const reloadDuration = weaponState?.reloadDuration ?? weaponState?.definition.reloadSeconds ?? RELOAD_DUR;
+    if ((!weaponState && reloadT >= reloadDuration) || (weaponState && !weaponState.reloading)) {
+      if (!weaponState) finishReload();
+      else {
+        g.state.ammo = weaponState.ammo;
+        g.state.reserve = weaponState.reserve;
+      }
+      g.state.reloading = false;
+      if (weaponState) {
+        g.state.ammo = weaponState.ammo;
+        g.state.reserve = weaponState.reserve;
+      }
+    }
   }
 
   // demo: автопополнение боезапаса, чтобы цикл не умирал на 0/0
@@ -821,7 +888,10 @@ export function update(dt, _g) {
   }
 
   // анимация магазина: выход, пауза, возврат
-  const rt = clamp01(reloadT / RELOAD_DUR);
+  const reloadDuration = g.expedition?.run?.weapon?.reloadDuration
+    ?? g.expedition?.run?.weapon?.definition.reloadSeconds
+    ?? RELOAD_DUR;
+  const rt = clamp01(reloadT / reloadDuration);
   magOut = g.state.reloading ? ramp(rt, 0.0, 0.30) * (1 - ramp(rt, 0.68, 0.95)) : 0;
   tilt = g.state.reloading ? ramp(rt, 0.0, 0.26) * (1 - ramp(rt, 0.60, 1.0)) : 0;
   const mk = Math.min(1, 12 * dt);

@@ -10,10 +10,15 @@ import { Inventory, Equipment } from '../src/expedition/inventory.js';
 import { ObjectiveDirector } from '../src/expedition/objectives.js';
 import { SpatialIndex, WorldAssembler } from '../src/expedition/worldRuntime.js';
 import { NoiseSystem } from '../src/expedition/noise.js';
+import { AnomalyBand, AnomalyLevel } from '../src/expedition/anomalyLevel.js';
+import { WatcherDirector, WatcherState } from '../src/expedition/watcher.js';
 import { ThreatDirector, ThreatPhase } from '../src/expedition/threatDirector.js';
-import { WeaponRegistry } from '../src/expedition/weapons.js';
+import { WeaponController, WeaponRegistry } from '../src/expedition/weapons.js';
 import { SkillRegistry } from '../src/expedition/skills.js';
 import { SaveSystem } from '../src/expedition/saveSystem.js';
+import { ItemRegistry, LootContainer } from '../src/expedition/loot.js';
+import { InteractionSystem, Interactable } from '../src/expedition/interactions.js';
+import { EventDirector } from '../src/expedition/events.js';
 import * as THREE from 'three';
 import { ThreeWorldAssembler } from '../src/expedition/threeWorldAssembler.js';
 
@@ -125,7 +130,7 @@ describe('expedition run lifecycle', () => {
     expect(manager.state).toBe(RunState.Results);
     expect(manager.run.result).toMatchObject({ status: 'success', seed: 'lifecycle' });
     expect(manager.campaign.completedRuns).toBe(1);
-    expect(manager.run.temporarySkills).toEqual([]);
+    expect(manager.run.temporarySkills).toHaveLength(1);
   });
 
   it('finishes a death as failure and preserves permanent campaign state only', () => {
@@ -138,6 +143,27 @@ describe('expedition run lifecycle', () => {
     expect(manager.run.result.temporarySkills).toEqual([]);
     expect(manager.campaign.permanentUnlocks).toEqual(['sidearm-license']);
     expect(manager.campaign.completedRuns).toBe(0);
+  });
+
+  it('keeps ordinary extracted resources and one protected artifact in campaign stash', () => {
+    const success = startedManager();
+    success.run.inventory.add({ id: 'rifle-ammo', type: 'ammo', amount: 4, maxStack: 30, weight: 0.02 });
+    success.completeObjective();
+    success.activateExtraction();
+    success.tickExtraction(3, true);
+    expect(success.campaign.stash['rifle-ammo']).toBeGreaterThan(0);
+
+    const failure = startedManager();
+    failure.run.inventory.add({
+      id: 'artifact',
+      type: 'artifact',
+      amount: 1,
+      maxStack: 1,
+      weight: 1,
+      protectedItem: true,
+    });
+    failure.playerDied('protected-item-test');
+    expect(failure.campaign.stash.artifact).toBe(1);
   });
 
   it('stores the selected loadout and awards a permanent unlock on extraction', () => {
@@ -155,6 +181,30 @@ describe('expedition run lifecycle', () => {
     expect(manager.campaign.permanentUnlocks).toContain('field-clearance');
   });
 
+  it('offers three seeded skill choices and keeps the selected skill scoped to the run', () => {
+    const manager = startedManager();
+    manager.completeObjective();
+    expect(manager.run.skillChoiceOpen).toBe(true);
+    expect(manager.run.skillOptions).toHaveLength(3);
+    const selected = manager.run.skillOptions[1].id;
+    expect(manager.chooseSkill(selected)).toBe(true);
+    expect(manager.run.skillChoiceOpen).toBe(false);
+    expect(manager.run.temporarySkills[0].id).toBe(selected);
+  });
+
+  it('collects seeded container contents and consumes healing resources', () => {
+    const manager = startedManager();
+    const container = manager.run.map.lootContainers.find((item) => item.contents?.length);
+    expect(container).toBeTruthy();
+    const collected = manager.collectLoot(container.id);
+    expect(collected.ok).toBe(true);
+    expect(manager.run.inventory.items.length).toBeGreaterThan(0);
+    expect(manager.collectLoot(container.id).ok).toBe(false);
+    const healing = manager.useHealing('bandage');
+    expect(healing).toMatchObject({ ok: true, amount: 20 });
+    expect(manager.run.stats.healingUsed).toBe(1);
+  });
+
   it('requires objective steps in order and supports an alternate extraction point', () => {
     const manager = startedManager();
     const firstStep = manager.run.objective.steps[0];
@@ -169,6 +219,50 @@ describe('expedition run lifecycle', () => {
 });
 
 describe('expedition interaction services', () => {
+  it('supports distance, line-of-sight and cancellable progress interactions', () => {
+    let visible = true;
+    let completed = 0;
+    const interactions = new InteractionSystem({ lineOfSight: () => visible });
+    interactions.register(
+      new Interactable({
+        id: 'generator',
+        type: 'objective',
+        position: { x: 0, z: 0 },
+        label: 'Start generator',
+        radius: 2,
+        duration: 1,
+        onInteract: () => {
+          completed += 1;
+          return true;
+        },
+      }),
+    );
+    expect(interactions.prompt({ x: 1, z: 0 }).available).toBe(true);
+    expect(interactions.interact({ x: 1, z: 0 }).value).toBe('started');
+    expect(interactions.tick(0.5, { x: 1, z: 0 }).value).toBe('progress');
+    visible = false;
+    expect(interactions.tick(0.1, { x: 1, z: 0 }).reason).toBe('cancelled');
+    expect(completed).toBe(0);
+    visible = true;
+    expect(interactions.interact({ x: 1, z: 0 }).value).toBe('started');
+    expect(interactions.tick(1, { x: 1, z: 0 }).ok).toBe(true);
+    expect(completed).toBe(1);
+  });
+
+  it('defines typed loot items and protects quest pickups', () => {
+    const registry = new ItemRegistry();
+    const container = new LootContainer({
+      id: 'quest-crate',
+      nodeId: 'generator-room',
+      position: { x: 0, z: 0 },
+      contents: [{ id: 'fuel-pickup', itemId: 'fuel', amount: 1 }],
+    });
+    const preview = container.preview(registry);
+    expect(preview[0]).toMatchObject({ id: 'fuel', quest: true });
+    expect(container.open(registry)[0]).toMatchObject({ id: 'fuel', quest: true });
+    expect(container.open(registry)).toEqual([]);
+  });
+
   it('protects quest items and enforces inventory capacity', () => {
     const inventory = new Inventory({ capacity: 1, weightLimit: 2 });
     expect(inventory.add({ id: 'ammo-9mm', type: 'ammo', amount: 3, maxStack: 10, weight: 0.1 }).ok).toBe(
@@ -262,15 +356,73 @@ describe('expedition interaction services', () => {
     expect(director.phase).not.toBe(ThreatPhase.Recovery);
   });
 
+  it('raises anomaly from noise and activates Watcher without teleporting', () => {
+    const level = new AnomalyLevel({ decayPerSecond: 0 });
+    level.add(72, 'shot');
+    expect(level.band).toBe(AnomalyBand.Critical);
+    const watcher = new WatcherDirector({ seed: 'watcher-test', activationAnomaly: 60 });
+    watcher.registerCandidate({ id: 'watcher-1', nodeId: 'dark-zone', position: { x: 20, z: 0 } });
+    watcher.update(0.1, { anomaly: level.value, playerPosition: { x: 0, z: 0 }, playerNodeId: 'start' });
+    expect(watcher.state).toBe(WatcherState.Stalking);
+    const initialPosition = watcher.position;
+    watcher.update(1, { anomaly: 80, playerPosition: { x: 4, z: 0 }, playerNodeId: 'dark-zone' });
+    expect(watcher.position).toEqual(initialPosition);
+    expect(watcher.snapshot().lastReason).toBe('anomaly-threshold');
+  });
+
+  it('records runtime noise into threat, anomaly and run statistics', () => {
+    const manager = new RunManager();
+    manager.start();
+    manager.openHideout();
+    manager.openLoadout();
+    manager.beginRun({ seed: 'noise-runtime', testMode: true });
+    manager.deploy();
+    const signals = manager.recordNoise({
+      kind: 'shot',
+      position: { x: 0, z: 0 },
+      intensity: 2.8,
+      duration: 2,
+    });
+    expect(signals.size).toBeGreaterThan(0);
+    expect(manager.run.stats.noiseEvents).toBe(1);
+    expect(manager.run.anomaly).toBeGreaterThan(0);
+    expect(manager.run.threat).toBeGreaterThan(0);
+    manager.tick(2, { playerPosition: { x: 0, z: 0 }, playerNodeId: manager.run.map.graph.startNodeId });
+    expect(manager.noiseSystem.events.size).toBe(0);
+  });
+
+  it('resolves optional events into rewards without blocking the objective', () => {
+    const manager = new RunManager();
+    manager.start();
+    manager.openHideout();
+    manager.openLoadout();
+    manager.beginRun({ seed: 'events', testMode: true });
+    manager.deploy();
+    const event = manager.run.map.events[0];
+    expect(new EventDirector(manager.run.map.events).preview(event.id)).toBeTruthy();
+    const result = manager.resolveEvent(event.id);
+    expect(result.ok).toBe(true);
+    expect(manager.run.stats.eventsResolved).toBe(1);
+    expect(manager.run.eventDirector.get(event.id).resolved).toBe(true);
+    expect(manager.resolveEvent(event.id).ok).toBe(false);
+    expect(manager.state).toBe(RunState.Exploration);
+  });
+
   it('provides four distinct weapon behaviors and twelve expiring temporary skills', () => {
     const weapons = new WeaponRegistry();
     expect(weapons.all()).toHaveLength(4);
+    expect(weapons.get('rifle')).toMatchObject({ fireMode: 'auto', movementMultiplier: 0.92 });
+    expect(weapons.get('oblomok-7').heatLimit).toBeGreaterThan(0);
     const shotgun = weapons.createState('shotgun', { ammo: 1, reserve: 8 });
     expect(shotgun.fire()).toMatchObject({ fired: true, pellets: 8 });
     expect(shotgun.startReload()).toBe(true);
     shotgun.tick(2.2);
     expect(shotgun.ammo).toBe(6);
     expect(new SkillRegistry().all()).toHaveLength(12);
+    const controller = new WeaponController(weapons);
+    controller.equip('oblomok-7', { ammo: 2, reserve: 2 });
+    expect(controller.fire()).toMatchObject({ fired: true, damage: 42, noise: 2.8 });
+    expect(controller.active.instability).toBe(8);
     const skill = new SkillRegistry().grant('quiet-step');
     skill.tick(skill.definition.duration);
     expect(skill.active).toBe(false);
@@ -292,5 +444,8 @@ describe('expedition interaction services', () => {
     });
     expect(save.load('{broken')).toMatchObject({ completedRuns: 0, permanentUnlocks: [] });
     expect(save.serialize({ temporarySkills: ['quiet-step'] })).not.toHaveProperty('temporarySkills');
+    const exported = save.export(campaign);
+    expect(save.import(exported)).toMatchObject(campaign);
+    expect(save.reset()).toMatchObject({ completedRuns: 0, permanentUnlocks: [] });
   });
 });

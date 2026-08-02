@@ -1,3 +1,31 @@
+import { WEAPON_DEFINITIONS } from '../data/weapons/index.js';
+
+export const FireMode = Object.freeze({ Semi: 'semi', Auto: 'auto' });
+
+export class AmmoDefinition {
+  constructor({ id, reserveType, maxStack = 30 } = {}) {
+    this.id = id;
+    this.reserveType = reserveType;
+    this.maxStack = maxStack;
+  }
+}
+
+export class ProjectileProfile {
+  constructor({ range = 100, penetration = 0, damageFalloff = 1 } = {}) {
+    this.range = range;
+    this.penetration = penetration;
+    this.damageFalloff = damageFalloff;
+  }
+}
+
+export class RecoilProfile {
+  constructor({ pitch = 0.014, yaw = 0.02, recovery = 1 } = {}) {
+    this.pitch = pitch;
+    this.yaw = yaw;
+    this.recovery = recovery;
+  }
+}
+
 export class WeaponDefinition {
   constructor({
     id,
@@ -11,6 +39,18 @@ export class WeaponDefinition {
     spread,
     reloadSeconds,
     range = 100,
+    fireMode = FireMode.Semi,
+    adsSpeed = 1,
+    movementMultiplier = 1,
+    noise = 1,
+    penetration = 0,
+    damageFalloff = 1,
+    rarity = 'common',
+    instabilityPerShot = 0,
+    heatLimit = 0,
+    ammoDefinition = null,
+    projectileProfile = null,
+    recoilProfile = null,
     tags = [],
   }) {
     this.id = id;
@@ -24,7 +64,22 @@ export class WeaponDefinition {
     this.spread = spread;
     this.reloadSeconds = reloadSeconds;
     this.range = range;
+    this.fireMode = fireMode;
+    this.adsSpeed = adsSpeed;
+    this.movementMultiplier = movementMultiplier;
+    this.noise = noise;
+    this.rarity = rarity;
+    this.ammo = ammoDefinition ?? new AmmoDefinition({ id: reserveType, reserveType });
+    this.projectile = projectileProfile ?? new ProjectileProfile({ range, penetration, damageFalloff });
+    this.recoil = recoilProfile ?? new RecoilProfile();
+    this.instabilityPerShot = instabilityPerShot;
+    this.heatLimit = heatLimit;
     this.tags = [...tags];
+  }
+
+  damageAt(distance = 0) {
+    const normalized = Math.max(0, Math.min(1, distance / Math.max(1, this.projectile.range)));
+    return this.damage * (1 - normalized * (1 - this.projectile.damageFalloff));
   }
 }
 
@@ -36,12 +91,21 @@ export class WeaponState {
     this.cooldown = 0;
     this.reloading = false;
     this.reloadRemaining = 0;
+    this.reloadDuration = 0;
+    this.instability = 0;
+    this.overheated = false;
   }
 
   tick(seconds) {
-    this.cooldown = Math.max(0, this.cooldown - Math.max(0, seconds));
+    const dt = Math.max(0, seconds);
+    this.cooldown = Math.max(0, this.cooldown - dt);
+    if (!this.reloading && this.instability > 0) {
+      this.instability = Math.max(0, this.instability - dt * 5);
+      if (this.overheated && this.instability <= (this.definition.heatLimit || 100) * 0.45)
+        this.overheated = false;
+    }
     if (this.reloading) {
-      this.reloadRemaining = Math.max(0, this.reloadRemaining - Math.max(0, seconds));
+      this.reloadRemaining = Math.max(0, this.reloadRemaining - dt);
       if (this.reloadRemaining === 0) this.finishReload();
     }
   }
@@ -49,20 +113,31 @@ export class WeaponState {
   fire() {
     if (this.reloading || this.cooldown > 0 || this.ammo <= 0)
       return { fired: false, reason: this.ammo <= 0 ? 'empty' : 'cooldown' };
+    if (this.overheated) return { fired: false, reason: 'overheated' };
     this.ammo -= 1;
     this.cooldown = 60 / this.definition.fireRate;
+    this.instability = Math.min(
+      this.definition.heatLimit || 100,
+      this.instability + this.definition.instabilityPerShot,
+    );
+    if (this.definition.heatLimit && this.instability >= this.definition.heatLimit) this.overheated = true;
     return {
       fired: true,
       damage: this.definition.damage,
       pellets: this.definition.pellets,
       spread: this.definition.spread,
+      noise: this.definition.noise,
+      projectile: this.definition.projectile,
+      fireMode: this.definition.fireMode,
+      overheated: this.overheated,
     };
   }
 
-  startReload() {
+  startReload(multiplier = 1) {
     if (this.reloading || this.ammo >= this.definition.magazine || this.reserve <= 0) return false;
     this.reloading = true;
-    this.reloadRemaining = this.definition.reloadSeconds;
+    this.reloadDuration = this.definition.reloadSeconds * Math.max(0.25, multiplier);
+    this.reloadRemaining = this.reloadDuration;
     return true;
   }
 
@@ -72,6 +147,36 @@ export class WeaponState {
     this.reserve -= moved;
     this.reloading = false;
     this.reloadRemaining = 0;
+    this.reloadDuration = 0;
+    this.overheated = false;
+    this.instability = Math.max(0, this.instability - 35);
+    return moved;
+  }
+}
+
+export class WeaponInstance extends WeaponState {}
+
+export class WeaponController {
+  constructor(registry = new WeaponRegistry()) {
+    this.registry = registry;
+    this.active = null;
+  }
+
+  equip(id, options) {
+    this.active = new WeaponInstance(this.registry.get(id), options);
+    return this.active;
+  }
+
+  fire() {
+    return this.active?.fire() ?? { fired: false, reason: 'no-weapon' };
+  }
+
+  reload() {
+    return this.active?.startReload() ?? false;
+  }
+
+  tick(seconds) {
+    this.active?.tick(seconds);
   }
 }
 
@@ -96,59 +201,5 @@ export class WeaponRegistry {
 }
 
 export function createDefaultWeapons() {
-  return [
-    new WeaponDefinition({
-      id: 'pistol',
-      name: 'Пистолет',
-      category: 'sidearm',
-      damage: 28,
-      magazine: 15,
-      reserveType: 'pistol',
-      fireRate: 300,
-      spread: 0.012,
-      reloadSeconds: 1.2,
-      range: 70,
-      tags: ['quiet', 'fast-switch'],
-    }),
-    new WeaponDefinition({
-      id: 'rifle',
-      name: 'Автомат',
-      category: 'rifle',
-      damage: 18,
-      magazine: 30,
-      reserveType: 'rifle',
-      fireRate: 720,
-      spread: 0.022,
-      reloadSeconds: 1.8,
-      range: 120,
-      tags: ['automatic', 'medium-range'],
-    }),
-    new WeaponDefinition({
-      id: 'shotgun',
-      name: 'Дробовик',
-      category: 'shotgun',
-      damage: 12,
-      pellets: 8,
-      magazine: 6,
-      reserveType: 'shell',
-      fireRate: 80,
-      spread: 0.12,
-      reloadSeconds: 2.2,
-      range: 35,
-      tags: ['loud', 'close-range'],
-    }),
-    new WeaponDefinition({
-      id: 'oblomok-7',
-      name: 'ОБЛОМОК-7',
-      category: 'artifact',
-      damage: 42,
-      magazine: 30,
-      reserveType: 'anomalous',
-      fireRate: 480,
-      spread: 0.018,
-      reloadSeconds: 2,
-      range: 140,
-      tags: ['artifact', 'anomaly', 'piercing'],
-    }),
-  ];
+  return WEAPON_DEFINITIONS.map((definition) => new WeaponDefinition(definition));
 }

@@ -26,6 +26,7 @@ export class ThreatDirector {
     this.cooldown = 0;
     this.activeEnemies = new Map();
     this.encountersStarted = 0;
+    this.lastReason = 'initial';
     this.player = { position: { x: 0, z: 0 }, nodeId: null };
   }
 
@@ -41,16 +42,18 @@ export class ThreatDirector {
     this.activeEnemies.delete(id);
   }
 
-  addThreat(amount) {
+  addThreat(amount, reason = 'signal') {
     this.threat = Math.max(0, Math.min(100, this.threat + amount));
+    this.lastReason = reason;
     if (this.threat >= 75) this.phase = ThreatPhase.Crisis;
     else if (this.threat >= 45) this.phase = ThreatPhase.Escalating;
     else if (this.phase !== ThreatPhase.Recovery) this.phase = ThreatPhase.Monitor;
     return this.threat;
   }
 
-  startRecovery(duration = this.recoveryDuration) {
+  startRecovery(duration = this.recoveryDuration, reason = 'recovery') {
     this.phase = ThreatPhase.Recovery;
+    this.lastReason = reason;
     this.recoveryRemaining = Math.max(0, duration);
     this.cooldown = Math.max(this.cooldown, this.recoveryRemaining);
   }
@@ -90,7 +93,20 @@ export class ThreatDirector {
     if (!spawn) return null;
     this.encountersStarted += 1;
     this.cooldown = this.phase === ThreatPhase.Crisis ? 3 : 8;
-    this.addThreat(this.phase === ThreatPhase.Crisis ? 4 : 2);
+    this.addThreat(this.phase === ThreatPhase.Crisis ? 4 : 2, 'encounter-started');
     return { ...spawn, encounter: this.encountersStarted };
+  }
+
+  snapshot() {
+    return {
+      threat: this.threat,
+      phase: this.phase,
+      cooldown: this.cooldown,
+      recoveryRemaining: this.recoveryRemaining,
+      activeEnemies: this.activeEnemies.size,
+      encountersStarted: this.encountersStarted,
+      maxEncounters: this.maxEncounters,
+      lastReason: this.lastReason,
+    };
   }
 }

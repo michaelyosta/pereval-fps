@@ -4,6 +4,7 @@ import { LevelModuleRegistry } from './levelModules.js';
 import { ModuleInstance, WorldGraph } from './worldGraph.js';
 import { WorldValidator } from './worldValidator.js';
 import { GeneratedWorld } from './worldRuntime.js';
+import { LootContainer } from './loot.js';
 
 const TRANSIT_MODULES = [
   'container_terminal',
@@ -41,6 +42,33 @@ const TEMPORARY_SKILLS = [
   'signal-reader',
   'last-stand',
 ];
+
+function itemForLoot(random, instance, point, objectiveType, index) {
+  if (point.role === 'fuel') return { itemId: 'fuel', amount: 1 };
+  if (point.role === 'fuse') return { itemId: 'fuse', amount: 1 };
+  if (
+    objectiveType === 'extract-sample' &&
+    index === 0 &&
+    ['field_laboratory', 'anomaly_site'].includes(instance.moduleId)
+  )
+    return { itemId: 'sample', amount: 1 };
+  const itemId = random.pick([
+    'rifle-ammo',
+    'pistol-ammo',
+    'shell',
+    'medkit',
+    'bandage',
+    'weapon-part',
+    'shelter-resource',
+    'artifact',
+  ]);
+  const amount = ['rifle-ammo', 'pistol-ammo'].includes(itemId)
+    ? random.int(5, 15)
+    : itemId === 'shell'
+      ? random.int(2, 6)
+      : 1;
+  return { itemId, amount };
+}
 
 function chooseWeighted(random, definitions, used) {
   const candidates = definitions.filter((definition) => !used.has(definition.id));
@@ -261,20 +289,24 @@ export class WorldGenerator {
 
     const objectiveData = objectiveFor(random, instances, objectiveType);
     const lootContainers = instances.flatMap(({ instance }) =>
-      instance.definition.lootPoints.map((point, index) => ({
-        id: `loot-${instance.id}-${index}`,
-        nodeId: instance.id,
-        type: random.pick(['ammo', 'medkit', 'fuel', 'fuse', 'weapon-part', 'artifact']),
-        position: instance.worldPoint(point),
-        secured: random.chance(0.25),
-      })),
+      instance.definition.lootPoints.map(
+        (point, index) =>
+          new LootContainer({
+            id: `loot-${instance.id}-${index}`,
+            nodeId: instance.id,
+            position: instance.worldPoint(point),
+            kind: random.pick(['crate', 'medical', 'weapon', 'rare']),
+            secured: random.chance(0.25),
+            contents: [itemForLoot(random, instance, point, objectiveType, index)],
+          }),
+      ),
     );
     const enemyGroups = instances.flatMap(({ instance }) =>
       instance.definition.enemyPoints.map((point, index) => ({
         id: `enemy-group-${instance.id}-${index}`,
         nodeId: instance.id,
-        archetype: random.pick(['soldier', 'stalker', 'anomaly']),
-        count: random.int(1, 3),
+        archetype: point.role === 'watcher' ? 'watcher' : random.pick(['soldier', 'stalker', 'anomaly']),
+        count: point.role === 'watcher' ? 1 : random.int(1, 3),
         position: instance.worldPoint(point),
       })),
     );
@@ -307,7 +339,12 @@ export class WorldGenerator {
       enemyGroups,
       events,
       temporarySkills,
-      startResources: lootContainers.filter((item) => item.nodeId === start.id).slice(0, 3),
+      startResources: lootContainers
+        .filter((item) => item.nodeId === start.id)
+        .slice(0, 3)
+        .flatMap((container) =>
+          container.contents.map((pickup) => ({ itemId: pickup.itemId, amount: pickup.amount })),
+        ),
       metadata: {
         difficulty: config.difficulty,
         watcher: config.watcher,

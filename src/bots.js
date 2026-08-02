@@ -9,6 +9,7 @@ import * as THREE from 'three';
 import { applyEnemyDamage } from './core/gameplay.js';
 import { isBlockedByWall, rayCapsuleDistance } from './core/ballistics.js';
 import { resolveCapsuleMotion, pointBlockedByCollider } from './core/collision.js';
+import { getEnemyDefinition } from './data/enemies/index.js';
 
 // Зависимости приходят через g.services, чтобы боевой, мировой и UI-модули не образовывали цикл.
 let gRef = null;
@@ -390,10 +391,12 @@ function genPatrolPath(b) {
 let bots = [];
 let botsGroup = null;
 
-function createBot(spawnPos) {
+function createBot(spawnPos, archetype = 'soldier') {
+  const definition = getEnemyDefinition(archetype);
   const bot = {
-    mesh: null, health: 100, alive: true, state: 'patrol',
-    speed: 1.4 + Math.random() * 0.4,
+    mesh: null, health: definition.health, maxHealth: definition.health, alive: true, state: 'patrol',
+    archetype: definition.id, definition, role: definition.role,
+    speed: definition.speed + Math.random() * 0.25,
     fireT: 0.6 + Math.random() * 0.8, burstT: 0, burstLeft: 0,
     strafeDir: Math.random() < 0.5 ? -1 : 1, strafeT: 1.5 + Math.random() * 1.5,
     patrolWp: 0, patrolPath: [], pauseT: 0,
@@ -402,11 +405,16 @@ function createBot(spawnPos) {
     spawn: spawnPos.clone(), yaw: Math.random() * Math.PI * 2,
     visT: Math.random() * 0.15, canSee: false,
     moving: false, stuck: false,
-    palette: (Math.random() * PALETTES.length) | 0,
+    watcherActive: definition.role !== 'watcher',
+    palette: definition.palette % PALETTES.length,
     mats: [], parts: {}, muzzleObj: null, headObj: null,
-    aim: 0, recoil: 0
+    aim: 0, recoil: 0,
+    attackT: 0, chargeT: 0,
   };
   const mesh = createBotMesh(bot, bot.palette);
+  mesh.userData.archetype = definition.id;
+  if (definition.role === 'melee' || definition.role === 'watcher') bot.parts.weapon.visible = false;
+  if (definition.role === 'watcher') mesh.visible = false;
   mesh.position.copy(spawnPos);
   bot.patrolPath = genPatrolPath(bot);
   botsGroup.add(mesh);
@@ -610,6 +618,7 @@ export function spawnBots(g, n = 8) {
             enemyGroup.position.z + Math.floor(index / 2) * 1.1,
           ),
           groupId: enemyGroup.id,
+          nodeId: enemyGroup.nodeId,
           archetype: enemyGroup.archetype,
         });
       }
@@ -618,10 +627,21 @@ export function spawnBots(g, n = 8) {
     ?.filter((candidate) => candidate.position.distanceTo(g.player.pos) > 10) ?? [];
   if (generatedSpawns.length) {
     for (const spawn of generatedSpawns.slice(0, Math.min(n, 12))) {
-      const bot = createBot(spawn.position);
+      const bot = createBot(spawn.position, spawn.archetype);
+      bot.id = `runtime-${spawn.groupId}-${bots.length}`;
       bot.expeditionGroupId = spawn.groupId;
       bot.archetype = spawn.archetype;
       bots.push(bot);
+      if (bot.role === 'watcher') {
+        g.expedition?.watcher?.registerCandidate({
+          id: bot.id,
+          nodeId: spawn.nodeId,
+          position: { x: bot.mesh.position.x, z: bot.mesh.position.z },
+          bot,
+        });
+      } else {
+        g.expedition?.threatDirector?.registerEnemy(bot);
+      }
     }
     return;
   }
@@ -634,12 +654,24 @@ export function spawnBots(g, n = 8) {
       if (!used.some(u => u.distanceTo(cand) < 2.5)) { sp = cand; break; }
     }
     used.push(sp.clone());
-    bots.push(createBot(sp));
+    const bot = createBot(sp, 'soldier');
+    bot.id = `runtime-arena-${bots.length}`;
+    bots.push(bot);
   }
 }
 
 export function getGroup() { return botsGroup; }
 export function getBots() { return bots; }
+
+export function activateWatcher(g, candidateId) {
+  const bot = bots.find((candidate) => candidate.id === candidateId && candidate.role === 'watcher');
+  if (!bot) return false;
+  bot.watcherActive = true;
+  bot.mesh.visible = true;
+  bot.state = 'patrol';
+  g.expedition?.threatDirector?.registerEnemy(bot);
+  return true;
+}
 
 // ============================================================
 //  ВРЕМЕННЫЕ ОБЪЕКТЫ (один набор на модуль, без new в update)
@@ -714,7 +746,97 @@ function updatePatrol(b, dt) {
   }
 }
 
+function updateStalkerAttack(b, dt, ppos, dist) {
+  _v1.subVectors(ppos, b.mesh.position);
+  _v1.y = 0;
+  if (dist > 0.01) _v1.normalize();
+  turnToward(b, Math.atan2(_v1.x, _v1.z), 10, dt);
+  b.attackT = Math.max(0, b.attackT - dt);
+  if (dist > b.definition.attackRange) {
+    b.moving = moveBot(b, _v1.x * b.speed, _v1.z * b.speed, dt);
+    return;
+  }
+  b.moving = false;
+  if (b.attackT <= 0 && hasLOS(b, ppos)) {
+    b.attackT = 1.15;
+    gRef?.damagePlayer?.(b.definition.damage, { type: 'stalker', enemy: b });
+    sfx('hurt', 0.18);
+  }
+}
+
+function updateWatcherAttack(b, dt, ppos, dist) {
+  _v1.subVectors(ppos, b.mesh.position);
+  _v1.y = 0;
+  if (dist > 0.01) _v1.normalize();
+  turnToward(b, Math.atan2(_v1.x, _v1.z), 12, dt);
+  b.attackT = Math.max(0, b.attackT - dt);
+  if (dist > b.definition.attackRange) {
+    b.moving = moveBot(b, _v1.x * b.speed, _v1.z * b.speed, dt);
+    return;
+  }
+  b.moving = false;
+  if (b.attackT <= 0 && hasLOS(b, ppos)) {
+    b.attackT = 1.6;
+    gRef?.damagePlayer?.(b.definition.damage, { type: 'watcher', enemy: b });
+    sfx('hurt', 0.26);
+  }
+}
+
+function fireAnomalyShot(b, ppos, dist) {
+  b.muzzleObj.getWorldPosition(_v1);
+  _v2.copy(ppos).sub(_v1);
+  if (!_v2.lengthSq()) return;
+  _v2.normalize();
+  const worldMod = getWorld();
+  let wallDistance = Infinity;
+  if (worldMod.getShootables) {
+    _ray.set(_v1, _v2);
+    const wallHits = _ray.intersectObjects([worldMod.getShootables()], true);
+    if (wallHits.length) wallDistance = wallHits[0].distance;
+  }
+  const playerHitDistance = rayCapsuleDistance(
+    _v1,
+    _v2,
+    { x: ppos.x, z: ppos.z, bottomY: ppos.y - 1.4, topY: ppos.y + 0.08, radius: 0.38 },
+    Math.min(dist + 2, b.definition.attackRange),
+  );
+  const blocked = isBlockedByWall(wallDistance, playerHitDistance);
+  spawnTracer(_v1, _v2, Math.min(b.definition.attackRange, wallDistance));
+  spawnMuzzle(_v1);
+  sfx('shotHit', 0.12);
+  if (Number.isFinite(playerHitDistance) && !blocked)
+    gRef?.damagePlayer?.(b.definition.damage, { type: 'anomaly', enemy: b });
+}
+
+function updateAnomalyAttack(b, dt, ppos, dist) {
+  _v1.subVectors(ppos, b.mesh.position);
+  _v1.y = 0;
+  if (dist > 0.01) _v1.normalize();
+  turnToward(b, Math.atan2(_v1.x, _v1.z), 4, dt);
+  b.attackT = Math.max(0, b.attackT - dt);
+  if (b.chargeT > 0) {
+    b.chargeT -= dt;
+    b.moving = false;
+    if (b.chargeT <= 0) fireAnomalyShot(b, ppos, dist);
+    return;
+  }
+  if (dist < 16) {
+    b.moving = moveBot(b, -_v1.x * b.speed, -_v1.z * b.speed, dt);
+  } else if (dist > 26) {
+    b.moving = moveBot(b, _v1.x * b.speed, _v1.z * b.speed, dt);
+  } else {
+    b.moving = false;
+  }
+  if (b.attackT <= 0 && dist <= b.definition.attackRange && hasLOS(b, ppos)) {
+    b.attackT = 3.2;
+    b.chargeT = b.definition.chargeSeconds;
+  }
+}
+
 function updateAttack(b, dt, ppos, dist) {
+  if (b.role === 'watcher') return updateWatcherAttack(b, dt, ppos, dist);
+  if (b.role === 'melee') return updateStalkerAttack(b, dt, ppos, dist);
+  if (b.role === 'telegraph-ranged') return updateAnomalyAttack(b, dt, ppos, dist);
   _v1.subVectors(ppos, b.mesh.position); _v1.y = 0;
   _v1.normalize();
   turnToward(b, Math.atan2(_v1.x, _v1.z), 7, dt);
@@ -816,7 +938,7 @@ export function applyDamage(g, bot, dmg, dir, point, meta = {}) {
   const result = applyEnemyDamage(g.state, bot, dmg, (event) => {
     g.events?.emit('enemy:damaged', { bot, ...event, ...meta });
   });
-  if (meta.debug) g.events?.emit('enemy:hit', { bot, ...result, ...meta });
+  if (meta.debug) g.events?.emit('enemy:hit', { bot, archetype: bot.archetype, ...result, ...meta });
 
   // кровь в точке попадания
   const p = point || bot.mesh.position;
@@ -832,6 +954,7 @@ export function applyDamage(g, bot, dmg, dir, point, meta = {}) {
   }
 
   if (result.killed) {
+    g.expedition?.threatDirector?.removeEnemy(bot.id);
     bot.state = 'dead';
     bot.deadT = 0; bot.fadeT = 0;
     bot.respawnT = 7.0;
@@ -852,7 +975,7 @@ function respawnBot(b) {
   b.mesh.rotation.set(0, b.yaw, 0);
   b.mesh.visible = true;
   setOpacity(b, 1);
-  b.health = 100; b.alive = true; b.state = 'patrol';
+  b.health = b.maxHealth ?? b.definition?.health ?? 100; b.alive = true; b.state = 'patrol';
   b.hitFlash = 0; b.flashOn = false;
   b.deadT = 0; b.fadeT = 0; b.respawnT = 0;
   b.pauseT = 0.4 + Math.random() * 0.8;
@@ -1031,6 +1154,8 @@ export function update(dt, g) {
 
   for (const b of bots) {
     b.mesh.updateMatrixWorld();
+
+    if (b.role === 'watcher' && !b.watcherActive) continue;
 
     if (b.state === 'dead') { updateDead(b, dt); continue; }
 

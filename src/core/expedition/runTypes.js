@@ -91,10 +91,15 @@ export class RunResult {
     this.reason = reason ?? null;
     this.seed = run?.config?.seed?.display ?? null;
     this.elapsedSeconds = run?.elapsedSeconds ?? 0;
+    this.threat = run?.threat ?? 0;
+    this.anomaly = run?.anomaly ?? 0;
+    this.anomalyBand = run?.anomalyBand ?? 'quiet';
     this.stats = { ...(run?.stats ?? {}) };
-    this.loot = [...(run?.loot ?? [])];
+    this.visitedModules = [...(run?.visitedModules ?? [])];
+    this.loot = status === 'success' ? [...(run?.loot ?? [])] : [];
     this.temporarySkills = [...(run?.temporarySkills ?? [])];
     this.permanentRewards = [...(run?.permanentRewards ?? [])];
+    this.watcher = run?.watcher?.snapshot?.() ?? null;
     this.campaign = campaign?.clone?.() ?? campaign ?? null;
   }
 }
@@ -105,16 +110,27 @@ export class ActiveRun {
     this.map = generatedWorld;
     this.elapsedSeconds = 0;
     this.threat = 0;
+    this.anomaly = 0;
+    this.anomalyBand = 'quiet';
+    this.watcherState = config.watcher ? 'dormant' : 'disabled';
     this.loot = [];
     this.stats = {
       kills: 0,
+      killsByType: {},
       shots: 0,
       hits: 0,
       damageTaken: 0,
       objectivesCompleted: 0,
+      lootCollected: 0,
+      healingUsed: 0,
+      noiseEvents: 0,
+      eventsResolved: 0,
     };
     this.temporarySkills = [];
+    this.skillOptions = [];
+    this.skillChoiceOpen = false;
     this.permanentRewards = [];
+    this.visitedModules = [];
     this.loadout = { primaryWeapon: config.primaryWeapon };
     this.equipment = null;
     this.weapon = null;

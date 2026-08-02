@@ -1,11 +1,21 @@
 export class InventoryItem {
-  constructor({ id, type = id, amount = 1, maxStack = 1, weight = 0, quest = false, metadata = {} }) {
+  constructor({
+    id,
+    type = id,
+    amount = 1,
+    maxStack = 1,
+    weight = 0,
+    quest = false,
+    protectedItem = false,
+    metadata = {},
+  }) {
     this.id = id;
     this.type = type;
     this.amount = amount;
     this.maxStack = Math.max(1, maxStack);
     this.weight = Math.max(0, weight);
     this.quest = quest;
+    this.protectedItem = protectedItem;
     this.metadata = { ...metadata };
   }
 

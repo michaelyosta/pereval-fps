@@ -139,6 +139,7 @@ export function sfx(name, vol = 1) {
 let hud = {};
 let hitmarkerTimer = 0, damageFlash = 0;
 let lastStep = 0, stepAlt = false;
+let mapRefresh = 0;
 const kfItems = [];
 
 export function init(_g) {
@@ -148,7 +149,9 @@ export function init(_g) {
     weaponName: $('#weapon-name'), reloadHint: $('#reload-hint'),
     crosshair: $('#crosshair'), hitmarker: $('#hitmarker'),
     damageVig: $('#damage-vig'), body: document.body,
-    healthFill: $('#health-fill'), debug: $('#debug-panel'), runSeed: $('#run-seed'), copySeed: $('#copy-seed')
+    healthFill: $('#health-fill'), debug: $('#debug-panel'), runSeed: $('#run-seed'), copySeed: $('#copy-seed'),
+    interaction: $('#interaction-prompt'), inventory: $('#expedition-inventory-items'), skills: $('#expedition-skills-items'),
+    anomaly: $('#expedition-anomaly-value'), mapList: $('#expedition-map-list')
   };
   hud.weaponName.textContent = g.state.weaponName;
   if (hud.runSeed) hud.runSeed.textContent = g.runSeed ?? '—';
@@ -177,6 +180,29 @@ export function init(_g) {
   g.events.on('player:damaged', () => {
     damageFlash = 1;
     sfx('hurt', 0.7);
+  });
+  g.events.on('player:healed', ({ amount }) => {
+    sfx('pickup', 0.75);
+    if (hud.interaction) {
+      hud.interaction.textContent = `ЛЕЧЕНИЕ +${amount}`;
+      hud.interaction.classList.add('on');
+      setTimeout(() => hud.interaction?.classList.remove('on'), 900);
+    }
+  });
+  g.events.on('loot:collected', ({ items = [] }) => {
+    if (hud.interaction) {
+      hud.interaction.textContent = `ЛУТ: ${items.map((item) => `${item.id}×${item.amount}`).join(', ')}`;
+      hud.interaction.classList.add('on');
+      setTimeout(() => hud.interaction?.classList.remove('on'), 1300);
+    }
+  });
+  g.events.on('event:resolved', ({ type, items = [] }) => {
+    sfx('pickup', 0.85);
+    if (hud.interaction) {
+      hud.interaction.textContent = `EVENT: ${type} · ${items.map((item) => `${item.id}×${item.amount}`).join(', ')}`;
+      hud.interaction.classList.add('on');
+      setTimeout(() => hud.interaction?.classList.remove('on'), 1500);
+    }
   });
 
   // старт аудио по первому клику
@@ -221,6 +247,7 @@ export function update(dt, _g) {
       $('#debug-seed').textContent = g.runSeed ?? '—';
       $('#debug-run-state').textContent = g.expedition.state;
       $('#debug-threat').textContent = String(Math.round(run?.threat ?? 0));
+      $('#debug-anomaly').textContent = `${Math.round(run?.anomaly ?? 0)} / ${run?.watcher?.state ?? run?.watcherState ?? 'disabled'}`;
       $('#debug-module').textContent = run?.map?.objective?.steps?.[run.objective.currentStep]?.nodeId ?? '—';
     }
   }
@@ -251,6 +278,40 @@ export function update(dt, _g) {
   hud.ammoRes.textContent = g.state.reserve;
   hud.reloadHint.classList.toggle('on', g.state.reloading);
   if (g.state.ammo === 0 && !g.state.reloading && g.state.reserve > 0) hud.reloadHint.classList.add('on');
+  if (hud.inventory) {
+    const items = g.expedition?.run?.inventory?.items ?? [];
+    const summary = new Map();
+    for (const item of items) summary.set(item.id, (summary.get(item.id) ?? 0) + item.amount);
+    hud.inventory.textContent = summary.size
+      ? [...summary.entries()].map(([id, amount]) => `${id}×${amount}`).join(' · ')
+      : 'пусто';
+  }
+  if (hud.skills) {
+    const skills = g.expedition?.run?.temporarySkills ?? [];
+    hud.skills.textContent = skills.length
+      ? skills.map((skill) => `${skill.id} ${Math.ceil(skill.remaining ?? 0)}s`).join(' · ')
+      : 'нет';
+  }
+  if (hud.anomaly) {
+    const run = g.expedition?.run;
+    hud.anomaly.textContent = `${Math.round(run?.anomaly ?? 0)} · ${run?.anomalyBand ?? 'quiet'}`;
+  }
+  if (hud.mapList && g.expedition?.run && (mapRefresh -= dt) <= 0) {
+    mapRefresh = 0.35;
+    const run = g.expedition.run;
+    const visited = new Set(run.visitedModules ?? []);
+    hud.mapList.replaceChildren();
+    for (const { instance, role } of run.map.modules ?? []) {
+      const row = document.createElement('div');
+      row.className = `expedition-map-row${visited.has(instance.id) ? ' known' : ''}`;
+      const label = document.createElement('span');
+      label.textContent = visited.has(instance.id) ? instance.moduleId : 'unknown sector';
+      const state = document.createElement('span');
+      state.textContent = visited.has(instance.id) ? role : '???';
+      row.append(label, state);
+      hud.mapList.append(row);
+    }
+  }
 
   // crosshair
   const spread = 6
@@ -260,6 +321,16 @@ export function update(dt, _g) {
     + (g.state.reloading ? 4 : 0);
   document.documentElement.style.setProperty('--spread', spread.toFixed(1) + 'px');
   hud.crosshair.classList.toggle('ads', g.ads.amount > 0.5 || !g.state.alive);
+  if (hud.interaction && g.expeditionInteractions && g.expedition?.run && !g.state.paused) {
+    const prompt = g.expeditionInteractions.prompt(
+      { x: g.player.pos.x, z: g.player.pos.z },
+      { run: g.expedition.run, moving: g.player.moveSpeed > 0.25 },
+    );
+    hud.interaction.textContent = prompt?.available ? `${prompt.label} [${prompt.action}]` : '';
+    hud.interaction.classList.toggle('on', Boolean(prompt?.available));
+  } else if (hud.interaction) {
+    hud.interaction.classList.remove('on');
+  }
 
   // hitmarker
   if (hitmarkerTimer > 0) {

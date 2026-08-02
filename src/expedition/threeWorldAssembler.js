@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { getEventDefinition } from './events.js';
 
 const CATEGORY_COLORS = {
   start: 0x6b8d9d,
@@ -14,6 +15,22 @@ const CATEGORY_COLORS = {
   optional: 0x6a577d,
   danger: 0x964e42,
   horror: 0x3e4650,
+};
+const LOOT_COLORS = {
+  crate: 0xb9874d,
+  medical: 0x6aa38d,
+  weapon: 0x8d91a0,
+  rare: 0xcaa95b,
+};
+const EVENT_COLORS = {
+  armory: 0xd6a45f,
+  'rare-cache': 0xcaa95b,
+  'wounded-scout': 0x6aa38d,
+  'anomaly-nest': 0xd06c86,
+  'blackout-room': 0x6c8faf,
+  'blocked-route': 0x927b5c,
+  ambush: 0xb34a4a,
+  'distress-signal': 0x75b7ae,
 };
 
 function sideForDelta(dx, dz) {
@@ -139,6 +156,7 @@ export class ThreeWorldAssembler {
     group.name = 'expeditionWorld';
     const openSides = collectOpenSides(generatedWorld.graph);
     const colliders = [];
+    const interactables = [];
     const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x5d5447, roughness: 0.95, metalness: 0 });
     this.materials.push(floorMaterial);
     for (const { instance, role } of generatedWorld.modules) {
@@ -192,12 +210,76 @@ export class ThreeWorldAssembler {
         marker.position.set(instance.position.x, 0.08, instance.position.z);
         marker.userData.moduleId = instance.moduleId;
         marker.userData.marker = role;
+        marker.userData.interactableId = `module-${instance.id}`;
         group.add(marker);
+        interactables.push({
+          id: `module-${instance.id}`,
+          type: role,
+          label: role === 'objective' ? 'Взаимодействовать с объектом' : 'Активировать эвакуацию',
+          position: { ...instance.position },
+          object: marker,
+          nodeId: instance.id,
+          radius: Math.max(instance.definition.size.x, instance.definition.size.z) * 0.45,
+        });
       }
+    }
+    for (const loot of generatedWorld.lootContainers ?? []) {
+      const material = new THREE.MeshStandardMaterial({
+        color: LOOT_COLORS[loot.kind] ?? LOOT_COLORS.crate,
+        roughness: 0.7,
+        metalness: loot.kind === 'weapon' ? 0.35 : 0.08,
+        emissive: loot.kind === 'rare' ? 0x3d2912 : 0x000000,
+        emissiveIntensity: loot.kind === 'rare' ? 0.35 : 0,
+      });
+      this.materials.push(material);
+      const mesh = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.65, 0.75), material);
+      mesh.position.set(loot.position.x, 0.33, loot.position.z);
+      mesh.userData.interactableId = loot.id;
+      mesh.userData.interactableType = 'loot';
+      mesh.userData.nodeId = loot.nodeId;
+      group.add(mesh);
+      interactables.push({
+        id: loot.id,
+        type: 'loot',
+        label: loot.secured ? 'Открыть закрытый контейнер' : 'Открыть контейнер',
+        position: { ...loot.position },
+        object: mesh,
+        nodeId: loot.nodeId,
+        radius: 2.4,
+      });
+    }
+    for (const event of generatedWorld.events ?? []) {
+      const node = generatedWorld.graph.getNode(event.nodeId);
+      if (!node) continue;
+      const definition = getEventDefinition(event.type);
+      const marker = new THREE.Mesh(
+        new THREE.TorusGeometry(0.55, 0.08, 8, 18),
+        new THREE.MeshBasicMaterial({
+          color: EVENT_COLORS[event.type] ?? 0xd6a45f,
+          transparent: true,
+          opacity: 0.82,
+        }),
+      );
+      this.materials.push(marker.material);
+      marker.position.set(node.position.x, 0.18, node.position.z);
+      marker.rotation.x = Math.PI / 2;
+      marker.userData.interactableId = event.id;
+      marker.userData.interactableType = 'event';
+      marker.userData.nodeId = event.nodeId;
+      group.add(marker);
+      interactables.push({
+        id: event.id,
+        type: 'event',
+        label: definition.label,
+        position: { ...node.position },
+        object: marker,
+        nodeId: event.nodeId,
+        radius: 2.6,
+      });
     }
     this.scene.add(group);
     this.group = group;
-    return { group, colliders, moduleCount: generatedWorld.modules.length };
+    return { group, colliders, interactables, moduleCount: generatedWorld.modules.length };
   }
 
   dispose() {
