@@ -5,3 +5,6 @@ reference/
 Thumbs.db
 *.log
 node_modules/
+dist/
+test-results/
+playwright-report/
