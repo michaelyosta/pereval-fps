@@ -1,0 +1,7 @@
+# внутренние артефакты QA (референсы CoD, скриншоты, отчёты критиков)
+reference/
+# системное
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
