@@ -87,9 +87,9 @@ npm run test:e2e         # Chromium smoke: boot, fire, pause, damage, kill, demo
 npm run benchmark        # writes docs/qa/final/benchmark.json and demo.png
 ```
 
-The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 3.00 FPS, 333.26 ms sampled frame time, 833 draw calls, 11,659 triangles, 37 resources, and 2.96 MB encoded resource bytes. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
+The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.99 FPS, 334.32 ms sampled frame time, 871 draw calls, 12,191 triangles, 37 resources, and 2.98 MB encoded resource bytes. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
 
-The build currently emits one main JavaScript chunk of about 629.91 kB minified and 169.30 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
+The build currently emits one main JavaScript chunk of about 632.19 kB minified and 169.81 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
 
 `npm audit --omit=dev --audit-level=high` is clean. The full development-tool audit currently reports five transitive Vite/Vitest/esbuild advisories; the available `npm audit fix --force` is a breaking upgrade, so it is intentionally not applied in this gameplay pass.
 
