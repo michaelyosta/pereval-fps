@@ -11,7 +11,7 @@ import * as THREE from 'three';
 // ---------- состояние модуля ----------
 let built = false;
 let shootGroup = null;            // вся статичная геометрия (для рейкастов пуль)
-const colliders = [];             // {x,z,hw,hd} — физика игрока/ботов
+const colliders = [];             // {x,z,hw,hd,height,rotation} — height-aware capsule physics
 
 const DUST_N = 250;
 const dustBase = new Float32Array(DUST_N * 3);
@@ -113,6 +113,8 @@ function buildTextures() {
       ctx.fillRect((Math.random() * w) | 0, (Math.random() * h) | 0, 2, 2);
     }
   });
+  T.noise.colorSpace = THREE.NoColorSpace;
+  T.groundNoise.colorSpace = THREE.NoColorSpace;
 
   // --- асфальт: шум, трещины, масляные пятна, песчаные проплешины ---
   T.asphalt = makeTex(512, 512, (ctx, w, h) => {
@@ -611,8 +613,8 @@ function addBox(x, y, z, sx, sy, sz, mat, rx = 0, ry = 0, rz = 0, cast = true) {
   return addStatic(m, cast);
 }
 
-function addCol(x, z, hw, hd, tag) {
-  colliders.push({ x, z, hw, hd, tag: tag || '' });
+function addCol(x, z, hw, hd, tag, height = WALL_H, rotation = 0) {
+  colliders.push({ x, z, hw, hd, tag: tag || '', height, rotation });
 }
 
 function buildPerimeter() {
@@ -630,7 +632,7 @@ function buildPerimeter() {
   ];
   for (const [x, z, hw, hd] of segs) {
     addBox(x, WALL_H / 2, z, hw * 2, WALL_H, hd * 2, C);
-    addCol(x, z, hw, hd, 'wall');
+    addCol(x, z, hw, hd, 'wall', WALL_H);
   }
 
   // ворота: два бетонных пилона
@@ -639,7 +641,7 @@ function buildPerimeter() {
 
   // повреждения: сколотые зубцы на верху стен
   const dmgSpots = [[-21.5, 25, 1], [22.5, -25, 0], [-35, -12.5, 1], [35, 0, 0]];
-  for (const [x, z, seed] of dmgSpots) {
+  for (const [x, z] of dmgSpots) {
     for (let i = 0; i < 2; i++) {
       const s = 0.7 + Math.random() * 0.9;
       addBox(x + (Math.random() * 2 - 1) * 8, WALL_H - 0.15,
@@ -718,7 +720,7 @@ function buildBuilding() {
   addRubble(CX - W / 2 + 1.5, CZ + D / 2 + 0.5, 4);
   addRubble(CX - W / 2 + 2.5, CZ - D / 2 + 0.5, 3);
 
-  addCol(CX, CZ, W / 2 + TH / 2, D / 2 + TH / 2, 'building');
+  addCol(CX, CZ, W / 2 + TH / 2, D / 2 + TH / 2, 'building', H);
 }
 
 // ---------- сторожевая вышка (~6 м, дерево/металл, лестница) ----------
@@ -751,7 +753,7 @@ function buildTower() {
     addBox(TX, ry, TZ + 1.6, 0.9, 0.05, 0.05, Wd);
   }
 
-  addCol(TX, TZ, 1.35, 1.35, 'tower');
+  addCol(TX, TZ, 1.35, 1.35, 'tower', 6.2);
 }
 
 // ---------- ангар-навес из профлиста на столбах ----------
@@ -760,7 +762,7 @@ function buildHangar() {
   // столбы
   for (const [px, pz] of [[10, 5], [16, 5], [22, 5], [10, 11], [16, 11], [22, 11]]) {
     addBox(HX + (px - HX), 1.6, HZ + (pz - HZ), 0.22, 3.2, 0.22, M.rust);
-    addCol(px, pz, 0.16, 0.16, 'hangar');
+    addCol(px, pz, 0.16, 0.16, 'hangar', 3.2);
   }
   // крыша из профлиста
   addBox(HX, 3.28, HZ, 12.6, 0.14, 6.6, M.corr);
@@ -794,13 +796,13 @@ function makeContainer(len, w, h, mat, x, z, ry, tilt) {
 function buildContainers() {
   // оливковый, стоит ровно (лёгкий поворот)
   makeContainer(6, 2.4, 2.6, M.olive, -6, -12, 0.05);
-  addCol(-6, -12, 3.0, 1.2, 'container');
+  addCol(-6, -12, 3.0, 1.2, 'container', 2.6, 0.05);
   // ржаво-оранжевый, лежит на боку (смятый)
   makeContainer(6, 2.4, 2.6, M.rust, 10, -4, 0, 'side');
-  addCol(10, -4, 3.0, 1.3, 'container');
+  addCol(10, -4, 3.0, 1.3, 'container', 1.3);
   // песочный, стоит у западной стороны
   makeContainer(6, 2.4, 2.6, M.sandMetal, -16, 12, -0.1);
-  addCol(-16, 12, 3.0, 1.2, 'container');
+  addCol(-16, 12, 3.0, 1.2, 'container', 2.6, -0.1);
 }
 
 // ---------- мешки с песком (2 ряда по 4, два слоя, ~1.1 м) ----------
@@ -821,10 +823,10 @@ function buildCover() {
   // два ряда по бокам подхода к центру двора
   sandbagRow(-3.4, 6.5, 1);
   sandbagRow(3.4, 6.5, -1);
-  addCol(-3.4, 7.05, 0.3, 0.95, 'sandbags');
-  addCol(-3.4, 9.25, 0.3, 1.1, 'sandbags');
-  addCol(3.4, 7.05, 0.3, 0.95, 'sandbags');
-  addCol(3.4, 9.25, 0.3, 1.1, 'sandbags');
+  addCol(-3.4, 7.05, 0.3, 0.95, 'sandbags', 1.1);
+  addCol(-3.4, 9.25, 0.3, 1.1, 'sandbags', 1.1);
+  addCol(3.4, 7.05, 0.3, 0.95, 'sandbags', 1.1);
+  addCol(3.4, 9.25, 0.3, 1.1, 'sandbags', 1.1);
   // одиночные мешки у укрытий
   const singles = [[5.2, 5.4], [-7.2, 4.2], [-2.2, -7.2]];
   for (const [sx, sz] of singles) {
@@ -837,14 +839,14 @@ function buildCover() {
   // ящики и паллеты
   addBox(-8, 0.625, 5, 1.25, 1.25, 1.25, M.wood);       // низ стопки
   addBox(-8, 1.875, 5, 1.25, 1.25, 1.25, M.wood);       // верх стопки
-  addCol(-8, 5, 0.65, 0.65, 'crates');
+  addCol(-8, 5, 0.65, 0.65, 'crates', 2.5);
   addBox(6, 0.07, 6, 1.5, 0.14, 1.5, M.wood);           // паллета
   addBox(5.5, 0.19, 6, 0.14, 0.1, 1.3, M.wood);
   addBox(6.5, 0.19, 6, 0.14, 0.1, 1.3, M.wood);
   addBox(6, 0.79, 6, 1.25, 1.25, 1.25, M.wood);          // ящик на паллете
-  addCol(6, 6, 0.75, 0.75, 'crates');
+  addCol(6, 6, 0.75, 0.75, 'crates', 1.4);
   addBox(-14, 0.625, -8, 1.25, 1.25, 1.25, M.wood);
-  addCol(-14, -8, 0.65, 0.65, 'crates');
+  addCol(-14, -8, 0.65, 0.65, 'crates', 1.25);
 
   // бочки
   const barrels = [[-3.2, -7.8], [-2.6, -8.4], [-3.6, -8.7]];
@@ -852,12 +854,12 @@ function buildCover() {
     const b = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.9, 12), M.rust);
     b.position.set(bx, 0.45, bz);
     addStatic(b);
-    addCol(bx, bz, 0.3, 0.3, 'barrel');
+    addCol(bx, bz, 0.3, 0.3, 'barrel', 0.9);
   }
 
   // куча щебня в северном проломе
   addRubble(6.75, -25, 6);
-  addCol(6.75, -25, 2.0, 1.0, 'rubble');
+  addCol(6.75, -25, 2.0, 1.0, 'rubble', 0.9);
 }
 
 // ---------- фонарные столбы (едва светящиеся плафоны + PointLight) ----------
@@ -881,7 +883,7 @@ function buildLamps(scene) {
     light.position.set(lx, 4.8, lz + armDir * 0.55);
     scene.add(light);
     lamps.push({ light, phase: Math.random() * Math.PI * 2 });
-    addCol(lx, lz, 0.12, 0.12, 'lamp');
+    addCol(lx, lz, 0.12, 0.12, 'lamp', 5);
   }
 }
 
@@ -899,7 +901,7 @@ function buildWire() {
     s.position.set(FX, y, -2);
     addStatic(s);
   }
-  addCol(FX, -3, 0.15, 7, 'wire');
+  addCol(FX, -3, 0.15, 7, 'wire', 1.3);
 }
 
 // ---------- припаркованный пикап (кабина, кузов, колёса) ----------
@@ -925,7 +927,7 @@ function buildPickup() {
   }
   // бампер
   addBox(PX + 2.35, 0.35, PZ, 1.9, 0.15, 0.12, M.pole);
-  addCol(PX, PZ, 2.3, 1.0, 'pickup');
+  addCol(PX, PZ, 2.3, 1.0, 'pickup', 2.3);
 }
 
 // ---------- пыль в воздухе (Points, медленный дрейф) ----------

@@ -27,7 +27,6 @@ const _ray = new THREE.Raycaster();
 _ray.far = 120;
 
 let g = null;
-let botsMod = null, worldMod = null, uiMod = null;
 
 // --- вьюмодель ---
 let vm = null;            // группа всех мешей оружия (ребёнок g.viewRoot)
@@ -39,6 +38,7 @@ let coreMat = null, coreAnchor = null, shardGroup = null;
 let sparkT = 1.0, surgeT = 5.0;
 const _muzzleWorld = new THREE.Vector3();
 const _ejectWorld = new THREE.Vector3();
+const _v4 = new THREE.Vector3();
 
 // --- поза / анимация ---
 const curPose = {
@@ -71,6 +71,7 @@ function canvasTex(w, h, fn) {
   const ctx = c.getContext('2d');
   fn(ctx, w, h);
   const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.anisotropy = 4;
   return t;
@@ -100,6 +101,7 @@ function buildMaterials() {
     ctx.fillStyle = '#888888'; ctx.fillRect(0, 0, w, h);
     noiseFill(ctx, w, h, 150, 60, 2200);
   });
+  bumpTex.colorSpace = THREE.NoColorSpace;
   // металл ствольной коробки: светлее оригинала, шум + царапины + потёртости кромок
   const gunmetal = canvasTex(256, 128, (ctx, w, h) => {
     ctx.fillStyle = '#3d4249'; ctx.fillRect(0, 0, w, h);
@@ -585,13 +587,6 @@ function spawnImpact(point, dir) {
   });
 }
 
-function spawnBlood(point, dir) {
-  spawnParticles(matterPool, point, dir, 10, {
-    speed: [1.2, 3.4], jitter: 0.9, grav: [8, 13], life: [0.18, 0.35],
-    colors: [0xa31313, 0x7d0f0f, 0xc41a1a], size: [2.2, 4.2]
-  });
-}
-
 // ---------- разброс ----------
 function applySpread(dir, angle) {
   if (angle <= 0.0001) return;
@@ -608,12 +603,14 @@ export function reload(g) {
   if (g.state.ammo >= g.state.magSize || g.state.reserve <= 0) return;
   g.state.reloading = true;
   reloadT = 0;
-  if (uiMod && uiMod.sfx) uiMod.sfx('reload', 1);
+  const ui = g.services?.ui;
+  if (ui?.sfx) ui.sfx('reload', 1);
 }
 
 function dryFire(g) {
   fireCooldown = 0.3;
-  if (uiMod && uiMod.sfx) uiMod.sfx('empty', 1);
+  const ui = g.services?.ui;
+  if (ui?.sfx) ui.sfx('empty', 1);
   if (g.state.reserve > 0) reload(g);
 }
 
@@ -632,6 +629,7 @@ export function shoot(g, aimTarget) {
   if (g.state.ammo <= 0) { dryFire(g); return; }
 
   g.state.ammo--;
+  g.state.shots = (g.state.shots || 0) + 1;
   fireCooldown = FIRE_INTERVAL;
 
   // отдача: импульсы в g.recoil (main сам гасит) + подброс viewRoot
@@ -646,6 +644,7 @@ export function shoot(g, aimTarget) {
   const move = (g.player.moveSpeed || 0) * 0.0007;
   const air = g.player.onGround ? 0 : 0.0035;
   const spread = base + move + air + spreadAccum;
+  if (g.debug) { g.debug.spread = spread; g.debug.recoil = g.recoil.pitch; }
 
   // направление: из камеры, либо на aimTarget (demo)
   g.camera.getWorldPosition(_v1);
@@ -662,8 +661,10 @@ export function shoot(g, aimTarget) {
   // рейкаст по ботам и статике
   _v3.copy(_v1).addScaledVector(dir, TRACER_MAX_DIST);
   const targets = [];
-  if (botsMod && botsMod.getGroup) { const bg = botsMod.getGroup(); if (bg) targets.push(bg); }
-  if (worldMod && worldMod.getShootables) { const sg = worldMod.getShootables(); if (sg) targets.push(sg); }
+  const botsMod = g.services?.bots;
+  const worldMod = g.services?.world;
+  if (botsMod?.getGroup) { const bg = botsMod.getGroup(); if (bg) targets.push(bg); }
+  if (worldMod?.getShootables) { const sg = worldMod.getShootables(); if (sg) targets.push(sg); }
   else if (g.staticGroup) targets.push(g.staticGroup);
 
   _ray.set(_v1, dir);
@@ -675,17 +676,35 @@ export function shoot(g, aimTarget) {
 
   if (hit) {
     _v3.copy(hit.point);
+    let blockedFromMuzzle = false;
+    if (!aimTarget && worldMod?.getShootables) {
+      _v4.subVectors(_v3, _muzzleWorld);
+      const muzzleDistance = _v4.length();
+      if (muzzleDistance > 0.01) {
+        _v4.normalize();
+        _ray.set(_muzzleWorld, _v4);
+        const muzzleHits = _ray.intersectObjects([worldMod.getShootables()], true);
+        if (muzzleHits.length && muzzleHits[0].distance + 0.05 < muzzleDistance) {
+          blockedFromMuzzle = true;
+          hit = muzzleHits[0];
+          _v3.copy(hit.point);
+        }
+      }
+    }
     // поднимаемся по parent до корня бота (userData.bot)
     let node = hit.object, bot = null;
     while (node) {
       if (node.userData && node.userData.bot) { bot = node.userData.bot; break; }
       node = node.parent;
     }
-    if (bot && botsMod && botsMod.applyDamage) {
-      const res = botsMod.applyDamage(g, bot, DMG, dir, hit.point);
+    if (bot && !blockedFromMuzzle && botsMod?.applyDamage) {
+      const headshot = hit.point.y >= bot.mesh.position.y + 1.42;
+      const damage = headshot ? DMG * 2 : DMG;
+      const res = botsMod.applyDamage(g, bot, damage, dir, hit.point, { headshot });
       const killed = !!(res && res.killed);
-      spawnBlood(hit.point, dir);
-      if (g.events && g.events.onEnemyHit) g.events.onEnemyHit(DMG, killed);
+      g.state.hits = (g.state.hits || 0) + 1;
+      if (headshot) g.state.headshots = (g.state.headshots || 0) + 1;
+      g.events?.emit('enemy:hit', { damage, killed, headshot });
     } else {
       spawnImpact(hit.point, dir); // статика: искры + пыль
     }
@@ -697,12 +716,13 @@ export function shoot(g, aimTarget) {
   spawnMuzzleLight();
   spawnCasing();
 
-  if (g.events && g.events.onShoot) g.events.onShoot();
-  else if (uiMod && uiMod.sfx) uiMod.sfx('shoot', 1);
+  g.events?.emit('weapon:shot', { ammo: g.state.ammo });
+  const ui = g.services?.ui;
+  if (ui?.sfx) ui.sfx('shoot', 1);
 
   // магазин пуст — щелчок + автоперезарядка
   if (g.state.ammo === 0) {
-    if (uiMod && uiMod.sfx) uiMod.sfx('empty', 0.9);
+    if (ui?.sfx) ui.sfx('empty', 0.9);
     reload(g);
   }
 }
@@ -769,15 +789,12 @@ export function init(_g) {
   buildFX(g.scene);
   g.viewRoot.position.copy(curPose.pos);
   g.viewRoot.rotation.set(curPose.rot.x, curPose.rot.y, curPose.rot.z);
-  // ленивая загрузка соседних модулей (не ломаем игру, если их нет)
-  import('./bots.js').then((m) => { botsMod = m; }).catch(() => {});
-  import('./world.js').then((m) => { worldMod = m; }).catch(() => {});
-  import('./ui.js').then((m) => { uiMod = m; }).catch(() => {});
 }
 
 export function update(dt, _g) {
   g = _g;
   if (!g) return;
+  if (g.debug) g.debug.recoil = g.recoil.pitch;
   fireCooldown -= dt;
 
   // перезарядка по R (main даёт одноразовый импульс true)

@@ -29,6 +29,8 @@
   #score{ color:#e8e4da; font-size:15px; letter-spacing:3px; text-transform:uppercase; opacity:.92;
     text-shadow:0 1px 3px rgba(0,0,0,.9); }
   #score b{ font-size:26px; display:block; font-weight:700; color:#fff; margin-top:2px; }
+  #objective{ color:#b9b4a8; font-size:11px; letter-spacing:2px; margin-top:12px; text-transform:uppercase; text-shadow:0 1px 3px rgba(0,0,0,.9); }
+  #objective b{ color:#f0d09b; font-size:13px; }
   #killfeed{ position:absolute; top:18px; right:22px; display:flex; flex-direction:column; gap:5px; align-items:flex-end; }
   .kf-entry{ background:rgba(10,12,16,.55); border-left:2px solid rgba(255,180,60,.85); padding:4px 10px;
     font-size:12.5px; letter-spacing:1px; color:#ddd; text-shadow:0 1px 2px #000; animation:kf-in .18s ease-out; }
@@ -97,24 +99,59 @@
   #death .d-title{ font-size:64px; font-weight:800; letter-spacing:8px; color:#e8dcd2; text-shadow:0 3px 18px rgba(0,0,0,.9); }
   #death .d-sub{ font-size:15px; letter-spacing:3px; color:#9aa3ad; margin-top:10px; text-transform:uppercase; }
 
+  /* ---- pause / settings ---- */
+  #pause{ position:fixed; inset:0; z-index:35; display:none; align-items:center; justify-content:center;
+    background:rgba(5,7,11,.78); backdrop-filter:blur(5px); }
+  .pause-panel{ width:min(420px, calc(100vw - 40px)); padding:30px 34px; border:1px solid rgba(255,190,100,.28);
+    background:linear-gradient(150deg, rgba(27,30,36,.96), rgba(11,14,19,.96)); box-shadow:0 16px 60px rgba(0,0,0,.5); }
+  .pause-kicker{ color:#c08a4e; font-size:11px; letter-spacing:4px; text-transform:uppercase; }
+  .pause-panel h2{ margin:8px 0 22px; color:#f2ede2; font-size:34px; letter-spacing:6px; }
+  .pause-buttons{ display:grid; gap:9px; }
+  .pause-buttons button{ border:1px solid rgba(255,255,255,.14); background:rgba(255,255,255,.06); color:#eee7d9;
+    padding:11px 14px; text-align:left; font:inherit; letter-spacing:1px; cursor:pointer; transition:background .15s,border-color .15s; }
+  .pause-buttons button:hover,.pause-buttons button:focus-visible{ background:rgba(255,180,70,.18); border-color:rgba(255,190,100,.7); outline:none; }
+  #settings-panel{ display:none; margin-top:18px; padding-top:16px; border-top:1px solid rgba(255,255,255,.12); color:#b9b4a8; font-size:12px; line-height:1.7; }
+  #settings-panel strong{ color:#f2ede2; font-weight:600; }
+  #settings-panel label{ display:flex; justify-content:space-between; align-items:center; gap:18px; margin-top:8px; }
+  #quality{ color:#eee7d9; background:#15191f; border:1px solid rgba(255,255,255,.18); padding:4px 8px; }
+  #sensitivity{ width:130px; accent-color:#c08a4e; }
+  #invert-y{ accent-color:#c08a4e; }
+
+  /* ---- debug ---- */
+  #debug-panel{ display:none; position:fixed; left:50%; bottom:14px; transform:translateX(-50%); z-index:40;
+    padding:7px 10px; background:rgba(8,10,14,.72); border:1px solid rgba(100,220,205,.24); color:#a9d9d2;
+    font:11px/1.6 ui-monospace, SFMono-Regular, Consolas, monospace; letter-spacing:.2px; pointer-events:none; white-space:nowrap; }
+  body.debug #debug-panel{ display:block; }
+
+  /* ---- victory ---- */
+  #victory{ position:fixed; inset:0; z-index:36; display:none; align-items:center; justify-content:center; text-align:center;
+    background:radial-gradient(ellipse at center, rgba(24,73,69,.42), rgba(4,8,11,.94)); }
+  .victory-panel{ width:min(460px, calc(100vw - 40px)); padding:34px; border:1px solid rgba(95,230,210,.36); background:rgba(9,18,20,.88); }
+  .victory-kicker{ color:#61d7c7; font-size:11px; letter-spacing:4px; text-transform:uppercase; }
+  .victory-panel h2{ margin:9px 0 22px; color:#f2ede2; font-size:42px; letter-spacing:7px; }
+  .victory-stats{ display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:24px; color:#a7b5b2; font-size:11px; letter-spacing:1px; text-transform:uppercase; }
+  .victory-stats b{ display:block; color:#fff; font-size:24px; margin-top:5px; }
+  #victory-restart{ width:100%; border:1px solid rgba(95,230,210,.35); background:rgba(95,230,210,.12); color:#e4f8f3;
+    padding:11px 14px; font:inherit; letter-spacing:1px; cursor:pointer; }
+
+  @media (max-width: 700px), (pointer: coarse){
+    #title .hint::after{ content:'\AНужны клавиатура и мышь'; white-space:pre; display:block; margin-top:14px; color:#c08a4e; font-size:12px; }
+    #title .controls{ opacity:.65; }
+    h1{ font-size:clamp(48px, 14vw, 86px); }
+    #ammobox{ right:16px; bottom:14px; }
+    #healthbox{ left:16px; bottom:14px; width:170px; }
+  }
+
   /* ---- error overlay (dev) ---- */
   #err{ position:fixed; left:8px; bottom:8px; z-index:99; color:#ff6b5e; font:12px/1.5 monospace; background:rgba(0,0,0,.7);
     padding:6px 10px; max-width:70vw; display:none; white-space:pre-wrap; }
 </style>
-<script type="importmap">
-{
-  "imports": {
-    "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
-  }
-}
-</script>
 </head>
 <body>
   <div id="vignette"></div>
   <div id="grading"></div>
   <div id="hud">
-    <div id="topbar"><div id="score">УБИЙСТВА<b id="kills">0</b></div></div>
+    <div id="topbar"><div id="score">УБИЙСТВА<b id="kills">0</b><div id="objective">ЦЕЛЬ: <b id="target-progress">0 / 5</b></div></div></div>
     <div id="killfeed"></div>
     <div id="crosshair">
       <div class="ch-line ch-t"></div><div class="ch-line ch-b"></div>
@@ -143,6 +180,31 @@
       R — перезарядка &nbsp;·&nbsp; Пробел — прыжок</div>
     </div>
   </div>
+  <div id="pause" role="dialog" aria-modal="true" aria-labelledby="pause-title">
+    <div class="pause-panel">
+      <div class="pause-kicker">операция «перевал»</div>
+      <h2 id="pause-title">ПАУЗА</h2>
+      <div class="pause-buttons">
+        <button id="resume" type="button">Продолжить</button>
+        <button id="restart" type="button">Перезапустить</button>
+        <button id="settings" type="button">Настройки</button>
+        <button id="pause-back" type="button">Вернуться в игру</button>
+      </div>
+      <div id="settings-panel"><strong>Настройки</strong>
+        <label for="quality">Качество<select id="quality"><option>Low</option><option>Medium</option><option>High</option><option>Ultra</option></select></label>
+      </div>
+      <label for="sensitivity">Sensitivity<input id="sensitivity" type="range" min="0.001" max="0.004" step="0.0001" value="0.0022" /></label>
+      <label for="invert-y">Invert Y<input id="invert-y" type="checkbox" /></label>
+    </div>
+  </div>
+  <div id="victory" role="dialog" aria-modal="true" aria-labelledby="victory-title">
+    <div class="victory-panel">
+      <div class="victory-kicker">операция завершена</div>
+      <h2 id="victory-title">ПОБЕДА</h2>
+      <div class="victory-stats"><div>Убийства<b id="victory-kills">0</b></div><div>Точность<b id="victory-accuracy">0%</b></div><div>Время<b id="victory-time">0.0s</b></div></div>
+      <button id="victory-restart" type="button">Начать заново</button>
+    </div>
+  </div>
   <div id="death">
     <div>
       <div class="d-title">ВЫ УБИТЫ</div>
@@ -150,6 +212,7 @@
     </div>
   </div>
   <div id="err"></div>
-<script type="module" src="./src/main.js"></script>
+  <div id="debug-panel">FPS <span id="debug-fps">0</span> · frame <span id="debug-frame">0</span>ms · calls <span id="debug-calls">0</span> · tris <span id="debug-triangles">0</span> · spread <span id="debug-spread">0</span> · recoil <span id="debug-recoil">0</span> · pos <span id="debug-pos">0,0,0</span> · weapon <span id="debug-weapon">ready</span> · lock <span id="debug-lock">free</span></div>
+<script type="module" src="/src/main.js?v=20260803"></script>
 </body>
 </html>

@@ -8,10 +8,19 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { EventBus } from './core/EventBus.js';
+import { damagePlayer as applyPlayerDamage, respawnPlayer as resetPlayerState } from './core/gameplay.js';
+import { resolveCapsuleMotion } from './core/collision.js';
+import * as worldModule from './world.js';
+import * as combatModule from './combat.js';
+import * as botsModule from './bots.js';
+import * as uiModule from './ui.js';
+import { getQualityPreset, QUALITY_PRESETS } from './config/graphics.js';
 
 const $ = (s) => document.querySelector(s);
 const PARAMS = new URLSearchParams(location.search);
 const DEMO = PARAMS.has('demo');
+if (PARAMS.has('debug')) document.body.classList.add('debug');
 
 // ---------- ошибки на экран (для отладки) ----------
 window.addEventListener('error', (e) => {
@@ -21,16 +30,22 @@ window.addEventListener('error', (e) => {
 });
 
 // ---------- renderer ----------
+const storedQuality = (() => {
+  try { return localStorage.getItem('pereval-quality'); } catch { return null; }
+})();
+const qualityName = getQualityPreset(PARAMS.get('quality') || storedQuality || 'High');
+const quality = QUALITY_PRESETS[qualityName];
 const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
 // защита от потери контекста (чёрный экран при фоне/глюке драйвера)
 renderer.domElement.addEventListener('webglcontextlost', (e) => { e.preventDefault(); }, false);
 renderer.domElement.addEventListener('webglcontextrestored', () => {
   if (typeof g !== 'undefined' && g.renderer) { g.renderer.render(g.scene, g.camera); }
 }, false);
-renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, quality.pixelRatio));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFShadowMap;   // мягкая полутень через shadow.radius
+renderer.info.autoReset = false;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.08;
 document.body.appendChild(renderer.domElement);
@@ -65,23 +80,30 @@ const GrainShader = {
 };
 const grainPass = new ShaderPass(GrainShader);
 composer.addPass(grainPass);
+renderer.shadowMap.enabled = quality.shadows;
+bloom.strength = quality.bloom;
+grainPass.uniforms.amount.value = quality.grain;
 
 // ---------- контракт GAME ----------
+const mods = { world: worldModule, combat: combatModule, bots: botsModule, ui: uiModule };
 const g = {
   renderer, scene, camera, composer, viewRoot,
   demo: DEMO,
+  sessionStarted: false,
   noLock: false,          // fallback: игра без захвата мыши (если pointer lock недоступен)
   clock: new THREE.Clock(),
   input: {
     forward: 0, strafe: 0, sprint: false, fire: false, ads: false,
     reload: false, jump: false, lookDX: 0, lookDY: 0
   },
+  settings: { sensitivity: 0.0022, invertY: false },
   state: {
     health: 100, maxHealth: 100, alive: true,
-    kills: 0, ammo: 30, reserve: 120, magSize: 30, weaponName: 'ОБЛОМОК-7',
+    kills: 0, matchTarget: 5, matchWon: false, shots: 0, hits: 0, headshots: 0, damageTaken: 0,
+    ammo: 30, reserve: 120, magSize: 30, weaponName: 'ОБЛОМОК-7',
     reloading: false, time: 0, paused: true
   },
-  events: { onEnemyHit: null, onPlayerDamage: null, onShoot: null },
+  events: new EventBus(),
   recoil: { pitch: 0, y: 0 },
   ads: { amount: 0 },          // 0..1 плавное прицеливание
   player: {
@@ -91,21 +113,55 @@ const g = {
     spawn: new THREE.Vector3(0, 1.62, 14)
   },
   staticGroup: null,           // заполняет world.js (стены, ящики, земля)
-  demoTime: 0
+  demoTime: 0,
+  services: mods,
+  quality: qualityName,
+  debug: { fps: 0, frameTime: 0, wallClock: 0, spread: 0, recoil: 0 },
+  damagePlayer: null
 };
-window.g = g; // доступ из консоли
 
-// ---------- загрузка модулей (устойчивая к ошибкам) ----------
-const mods = {};
-async function loadMod(name, url) {
-  try { mods[name] = await import(url); return true; }
-  catch (e) { console.error('MODULE FAIL:', name, e); return false; }
+try {
+  const storedSensitivity = Number(localStorage.getItem('pereval-sensitivity'));
+  if (Number.isFinite(storedSensitivity)) g.settings.sensitivity = Math.max(0.001, Math.min(0.004, storedSensitivity));
+  g.settings.invertY = localStorage.getItem('pereval-invert-y') === '1';
+} catch { /* storage is optional */ }
+
+if (import.meta.env?.DEV || PARAMS.has('debug')) {
+  window.__PEREVAL_DEBUG__ = {
+    getState: () => ({
+      ...g.state,
+      player: { x: g.player.pos.x, y: g.player.pos.y, z: g.player.pos.z },
+      pointerLocked: document.pointerLockElement === renderer.domElement
+    }),
+    getRendererInfo: () => ({
+      calls: renderer.info.render.calls,
+      triangles: renderer.info.render.triangles,
+      points: renderer.info.render.points,
+      lines: renderer.info.render.lines
+    }),
+    shoot: () => mods.combat?.shoot(g, null),
+    damagePlayer: (amount = 10) => g.damagePlayer(amount, { type: 'debug' }),
+    killNearestEnemy: () => {
+      const bot = mods.bots?.getBots?.().find((candidate) => candidate.alive);
+      if (!bot) return { killed: false };
+      return mods.bots.applyDamage(g, bot, 999, new THREE.Vector3(0, 0, -1), bot.mesh.position, { debug: true });
+    }
+  };
 }
 
 // ---------- ввод ----------
 const keys = new Set();
 window.addEventListener('keydown', (e) => {
   if (e.code === 'Space') e.preventDefault();
+  if (e.code === 'Escape' && g.sessionStarted && !g.demo && g.state.alive) {
+    if (document.pointerLockElement === renderer.domElement) {
+      document.exitPointerLock();
+    } else if (g.noLock) {
+      g.state.paused = !g.state.paused;
+      setPauseOverlay(g.state.paused);
+    }
+    return;
+  }
   keys.add(e.code);
   if (e.code === 'KeyR') g.input.reload = true;
   if (e.code === 'Space' && !g.demo) g.input.jump = true;
@@ -117,8 +173,8 @@ window.addEventListener('keyup', (e) => {
 });
 window.addEventListener('mousemove', (e) => {
   if (document.pointerLockElement !== renderer.domElement && !g.noLock) return;
-  g.player.yaw -= e.movementX * 0.0022;
-  g.player.pitch -= e.movementY * 0.0022;
+  g.player.yaw -= e.movementX * g.settings.sensitivity;
+  g.player.pitch += (g.settings.invertY ? 1 : -1) * e.movementY * g.settings.sensitivity;
   g.player.pitch = Math.max(-1.45, Math.min(1.45, g.player.pitch));
   g.input.lookDX = e.movementX; g.input.lookDY = e.movementY;
 });
@@ -135,31 +191,131 @@ window.addEventListener('mouseup', (e) => {
 window.addEventListener('contextmenu', (e) => e.preventDefault());
 
 const titleEl = $('#title');
+const pauseEl = $('#pause');
+const settingsPanel = $('#settings-panel');
+
+function setPauseOverlay(visible) {
+  if (pauseEl) pauseEl.style.display = visible ? 'flex' : 'none';
+  if (settingsPanel && !visible) settingsPanel.style.display = 'none';
+}
+
+function setQuality(name) {
+  const nextName = getQualityPreset(name);
+  const next = QUALITY_PRESETS[nextName];
+  g.quality = nextName;
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, next.pixelRatio));
+  renderer.shadowMap.enabled = next.shadows;
+  bloom.strength = next.bloom;
+  grainPass.uniforms.amount.value = next.grain;
+  const select = $('#quality');
+  if (select) select.value = nextName;
+  try { localStorage.setItem('pereval-quality', nextName); } catch { /* storage is optional */ }
+}
+g.setQuality = setQuality;
+
+function requestGamePointerLock() {
+  if (!g.sessionStarted || g.demo || !g.state.alive) return;
+  g.noLock = true;
+  g.state.paused = false;
+  setPauseOverlay(false);
+  try {
+    const lockResult = renderer.domElement.requestPointerLock();
+    if (lockResult?.catch) lockResult.catch(() => { g.noLock = true; });
+  } catch {
+    g.noLock = true;
+  }
+}
+
+function restartMatch() {
+  g.state.kills = 0;
+  g.state.matchWon = false;
+  g.state.shots = 0;
+  g.state.hits = 0;
+  g.state.headshots = 0;
+  g.state.damageTaken = 0;
+  g.state.time = 0;
+  deathTimer = -1;
+  resetPlayerState(g.state);
+  g.player.pos.copy(g.player.spawn);
+  g.player.vel.set(0, 0, 0);
+  g.player.yaw = 0; g.player.pitch = 0;
+  g.recoil.pitch = 0; g.recoil.y = 0;
+  $('#death').style.display = 'none';
+  $('#victory').style.display = 'none';
+  if (mods.bots?.respawnAll) mods.bots.respawnAll(g);
+  requestGamePointerLock();
+}
+
+function showVictory() {
+  if (g.state.matchWon) return;
+  g.state.matchWon = true;
+  g.state.paused = true;
+  if (document.pointerLockElement === renderer.domElement) document.exitPointerLock();
+  const accuracy = g.state.shots ? Math.round((g.state.hits / g.state.shots) * 100) : 0;
+  $('#victory-kills').textContent = String(g.state.kills);
+  $('#victory-accuracy').textContent = `${accuracy}%`;
+  $('#victory-time').textContent = `${g.state.time.toFixed(1)}s`;
+  $('#victory').style.display = 'flex';
+}
+
+g.events.on('enemy:hit', ({ killed }) => {
+  if (killed && g.state.kills >= g.state.matchTarget) showVictory();
+});
+
+$('#resume')?.addEventListener('click', requestGamePointerLock);
+$('#pause-back')?.addEventListener('click', requestGamePointerLock);
+$('#restart')?.addEventListener('click', restartMatch);
+$('#settings')?.addEventListener('click', () => {
+  if (settingsPanel) settingsPanel.style.display = settingsPanel.style.display === 'block' ? 'none' : 'block';
+});
+$('#quality')?.addEventListener('change', (event) => setQuality(event.target.value));
+const sensitivity = $('#sensitivity');
+const invertY = $('#invert-y');
+if (sensitivity) sensitivity.value = String(g.settings.sensitivity);
+if (invertY) invertY.checked = g.settings.invertY;
+sensitivity?.addEventListener('input', (event) => {
+  g.settings.sensitivity = Number(event.target.value);
+  try { localStorage.setItem('pereval-sensitivity', String(g.settings.sensitivity)); } catch { /* storage is optional */ }
+});
+invertY?.addEventListener('change', (event) => {
+  g.settings.invertY = event.target.checked;
+  try { localStorage.setItem('pereval-invert-y', event.target.checked ? '1' : '0'); } catch { /* storage is optional */ }
+});
+$('#victory-restart')?.addEventListener('click', restartMatch);
 // старт по клику на баннер (баннер перекрывает canvas — вешаем обработчик на него)
 titleEl.addEventListener('click', () => {
   if (g.demo) return;
   if (!g.state.alive) return;
+  g.sessionStarted = true;
   titleEl.style.display = 'none';
-  if (document.pointerLockElement !== renderer.domElement) {
-    try { renderer.domElement.requestPointerLock(); } catch (e) {}
-  }
+  requestGamePointerLock();
 });
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === renderer.domElement;
-  if (locked) g.noLock = false;
-  g.state.paused = !locked;
+  if (!g.sessionStarted || g.demo) return;
+  if (locked) {
+    g.noLock = false;
+    g.state.paused = false;
+    setPauseOverlay(false);
+  } else if (!g.noLock && !g.state.matchWon) {
+    g.state.paused = true;
+    setPauseOverlay(true);
+  }
   if (locked) titleEl.style.display = 'none';
 });
 document.addEventListener('pointerlockerror', () => {
   // браузер отклонил захват — играем без него (fallback)
   g.noLock = true;
   g.state.paused = false;
+  g.sessionStarted = true;
+  setPauseOverlay(false);
   titleEl.style.display = 'none';
 });
 
 // ---------- физика игрока (горизонталь: окружность против AABBs) ----------
 function resolveCollision(x, z, r) {
   const cols = (mods.world && mods.world.getColliders) ? mods.world.getColliders() : [];
+  if (Array.isArray(cols)) return resolveCapsuleMotion(x, z, r, cols, { bottomY: 0, topY: 1.8, stepHeight: 0.45 });
   for (const c of cols) {
     const cx = Math.max(c.x - c.hw, Math.min(x, c.x + c.hw));
     const cz = Math.max(c.z - c.hd, Math.min(z, c.z + c.hd));
@@ -307,22 +463,26 @@ const demo = {
 
 // ---------- смерть игрока / респаун ----------
 let deathTimer = -1;
-function hurtPlayer(dmg) {
-  if (!g.state.alive || g.demo) return;
-  g.state.health = Math.max(0, g.state.health - dmg);
-  if (g.events.onPlayerDamage) g.events.onPlayerDamage(dmg);
-  if (g.state.health <= 0) {
-    g.state.alive = false;
+function hurtPlayer(dmg, source) {
+  if (g.demo) return { applied: 0, killed: false };
+  const result = applyPlayerDamage(
+    g.state,
+    dmg,
+    (event) => g.events.emit('player:damaged', event),
+    source
+  );
+  g.state.damageTaken = (g.state.damageTaken || 0) + result.applied;
+  if (result.killed) {
     g.input.fire = false; g.input.ads = false;
     $('#death').style.display = 'flex';
     deathTimer = 3.0;
   }
+  return result;
 }
-g.events.onPlayerDamage = hurtPlayer;
+g.damagePlayer = hurtPlayer;
 
 function respawn() {
-  g.state.alive = true;
-  g.state.health = g.state.maxHealth;
+  resetPlayerState(g.state);
   g.player.pos.copy(g.player.spawn);
   g.player.vel.set(0, 0, 0);
   g.player.yaw = 0; g.player.pitch = 0;
@@ -330,6 +490,7 @@ function respawn() {
   g.state.ammo = g.state.magSize;
   g.state.reserve = 120;
   g.state.reloading = false;
+  g.events.emit('player:respawned', { health: g.state.health });
   $('#death').style.display = 'none';
   if (mods.bots && mods.bots.respawnAll) mods.bots.respawnAll(g);
 }
@@ -337,8 +498,13 @@ function respawn() {
 // ---------- главный цикл ----------
 function frame() {
   requestAnimationFrame(frame);
+  renderer.info.reset();
   const dt = Math.min(g.clock.getDelta(), 0.05);
-  g.state.time += dt;
+  g.debug.wallClock += dt;
+  g.debug.frameTime = dt * 1000;
+  g.debug.fps = g.debug.fps * 0.9 + (1 / Math.max(dt, 0.001)) * 0.1;
+  const simDt = g.demo || !g.state.paused ? dt : 0;
+  if (simDt > 0) g.state.time += simDt;
   grainPass.uniforms.time.value = g.state.time;
 
   // WASD-движение и спринт (каждый кадр — надёжнее обработчиков)
@@ -347,7 +513,7 @@ function frame() {
   g.input.sprint = keys.has('ShiftLeft') || keys.has('ShiftRight');
 
   if (g.demo) {
-    demo.update(dt);
+    demo.update(simDt);
     g.player.bobPhase = 0;
   } else if (!g.state.paused) {
     if (g.state.alive) updatePlayer(dt);
@@ -357,12 +523,12 @@ function frame() {
     camera.rotation.y = g.player.yaw;
   }
 
-  if (mods.world && mods.world.update) mods.world.update(dt, g);
-  if (mods.combat && mods.combat.update) mods.combat.update(dt, g);
-  if (mods.bots && mods.bots.update) mods.bots.update(dt, g);
-  if (mods.ui && mods.ui.update) mods.ui.update(dt, g);
+  if (mods.world && mods.world.update) mods.world.update(simDt, g);
+  if (mods.combat && mods.combat.update) mods.combat.update(simDt, g);
+  if (mods.bots && mods.bots.update) mods.bots.update(simDt, g);
 
   composer.render();
+  if (mods.ui && mods.ui.update) mods.ui.update(simDt, g);
 }
 
 // ---------- resize ----------
@@ -376,17 +542,13 @@ window.addEventListener('resize', () => {
 
 // ---------- старт ----------
 async function boot() {
-  await loadMod('world', './world.js');
-  await loadMod('combat', './combat.js');
-  await loadMod('bots', './bots.js');
-  await loadMod('ui', './ui.js');
-
   if (mods.world && mods.world.init) mods.world.init(g);
   if (mods.combat && mods.combat.init) mods.combat.init(g);
   if (mods.bots && mods.bots.init) mods.bots.init(g);
   if (mods.ui && mods.ui.init) mods.ui.init(g);
 
   if (g.demo) {
+    g.state.paused = false;
     titleEl.style.display = 'none';
     document.body.classList.add('demo');
     $('#hud').style.display = 'block';

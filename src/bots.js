@@ -6,13 +6,14 @@
 //  Контракт GAME (g) — см. main.js. Мир — mods.world.
 // ============================================================
 import * as THREE from 'three';
+import { applyEnemyDamage } from './core/gameplay.js';
+import { isBlockedByWall, rayCapsuleDistance } from './core/ballistics.js';
+import { resolveCapsuleMotion, pointBlockedByCollider } from './core/collision.js';
 
-// --- доступ к миру и звуку (динамический импорт; модули кэшируются, loadMod в main получит тот же инстанс) ---
-let worldMod = { getColliders: () => [], getShootables: () => null };
-try { const m = await import('./world.js'); if (m) worldMod = m; } catch (e) { /* мир не загружен — боты просто патрулируют */ }
-let uiMod = null;
-try { uiMod = await import('./ui.js'); } catch (e) { /* звук недоступен */ }
-const sfx = (n, v) => { if (uiMod && uiMod.sfx) uiMod.sfx(n, v); };
+// Зависимости приходят через g.services, чтобы боевой, мировой и UI-модули не образовывали цикл.
+let gRef = null;
+const getWorld = () => gRef?.services?.world || { getColliders: () => [], getShootables: () => null };
+const sfx = (n, v) => gRef?.services?.ui?.sfx?.(n, v);
 
 // ============================================================
 //  ОБЩИЕ РЕСУРСЫ (создаются один раз, переиспользуются всеми ботами)
@@ -35,7 +36,9 @@ function makeMarkerTex() {
   ctx.beginPath();
   ctx.moveTo(16, 10); ctx.lineTo(23, 21); ctx.lineTo(9, 21);
   ctx.closePath(); ctx.fill();
-  return new THREE.CanvasTexture(c);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 // ============================================================
@@ -304,9 +307,10 @@ function buildSpawnPoints() {
 
 // точка внутри коллайдера мира?
 function pointBlocked(x, z, margin) {
+  const worldMod = getWorld();
   const cols = worldMod.getColliders ? worldMod.getColliders() : [];
   for (const c of cols) {
-    if (Math.abs(x - c.x) < c.hw + margin && Math.abs(z - c.z) < c.hd + margin) return true;
+    if (pointBlockedByCollider(x, z, margin, c, { bottomY: 0, topY: 1.8, stepHeight: 0.45 })) return true;
   }
   return false;
 }
@@ -327,7 +331,9 @@ function findFree(x, z, margin) {
 
 // круг против AABB — как у игрока в main.js
 function resolveCircle(x, z, r) {
+  const worldMod = getWorld();
   const cols = worldMod.getColliders ? worldMod.getColliders() : [];
+  if (Array.isArray(cols)) return resolveCapsuleMotion(x, z, r, cols, { bottomY: 0, topY: 1.8, stepHeight: 0.45 });
   for (const c of cols) {
     const cx = Math.max(c.x - c.hw, Math.min(x, c.x + c.hw));
     const cz = Math.max(c.z - c.hd, Math.min(z, c.z + c.hd));
@@ -375,7 +381,6 @@ function genPatrolPath(b) {
 // ============================================================
 let bots = [];
 let botsGroup = null;
-let gRef = null;
 
 function createBot(spawnPos) {
   const bot = {
@@ -576,7 +581,7 @@ export function init(g) {
   initPickups(g.scene);
   buildSpawnPoints();
   // в обычной игре ботов создаём сразу (в demo это делает main)
-  if (!g.demo) spawnBots(g, 9);
+  if (!g.demo) spawnBots(g, 6);
 }
 
 export function spawnBots(g, n = 8) {
@@ -637,6 +642,7 @@ function moveBot(b, vx, vz, dt) {
 
 // прямая видимость: рейкаст от головы к глазам игрока через статику мира
 function hasLOS(b, ppos) {
+  const worldMod = getWorld();
   const shootables = worldMod.getShootables ? worldMod.getShootables() : null;
   b.headObj.getWorldPosition(_v1);
   _v2.subVectors(ppos, _v1);
@@ -734,21 +740,35 @@ function fireShot(b, ppos, dist) {
   );
   _v3.subVectors(_v2, _v1).normalize();
 
-  spawnTracer(_v1, _v3, Math.min(dist + 2, 40));
+  const worldMod = getWorld();
+  let wallDistance = Infinity;
+  if (worldMod.getShootables) {
+    _ray.set(_v1, _v3);
+    const wallHits = _ray.intersectObjects([worldMod.getShootables()], true);
+    if (wallHits.length) wallDistance = wallHits[0].distance;
+  }
+  const targetDistance = Math.min(dist + 2, 40);
+  const playerHitDistance = rayCapsuleDistance(
+    _v1,
+    _v3,
+    { x: ppos.x, z: ppos.z, bottomY: ppos.y - 1.4, topY: ppos.y + 0.08, radius: 0.38 },
+    targetDistance
+  );
+  spawnTracer(_v1, _v3, Math.min(targetDistance, wallDistance));
   spawnMuzzle(_v1);
   sfx('shoot', 0.1); // дальний выстрел — тише
 
-  // попадание: если статика ближе игрока — заслон
-  let hitPlayer = true;
-  const shootables = worldMod.getShootables ? worldMod.getShootables() : null;
-  if (shootables) {
-    _ray.set(_v1, _v3);
-    const hits = _ray.intersectObjects([shootables], true);
-    if (hits.length && hits[0].distance < dist - 0.3) hitPlayer = false;
-  }
+  // Попадание требует пересечения с капсулой игрока и отсутствия ближайшей стены.
+  const movementPenalty = Math.min(0.22, (gRef?.player.moveSpeed || 0) * 0.025);
+  const distancePenalty = Math.min(0.24, dist * 0.006);
+  const burstPenalty = Math.min(0.18, Math.max(0, 4 - b.burstLeft) * 0.035);
+  const chance = Math.max(0.08, 0.42 - movementPenalty - distancePenalty - burstPenalty);
+  const hitPlayer = Number.isFinite(playerHitDistance)
+    && !isBlockedByWall(wallDistance, playerHitDistance)
+    && Math.random() < chance;
   if (hitPlayer) {
     const dmg = Math.max(5, Math.min(12, Math.round(12.5 - dist * 0.11))); // меньше в дальнем
-    if (gRef && gRef.events && gRef.events.onPlayerDamage) gRef.events.onPlayerDamage(dmg);
+    gRef?.damagePlayer?.(dmg, { type: 'enemy', enemy: b });
     sfx('shotHit', 0.3);
   }
 }
@@ -756,10 +776,13 @@ function fireShot(b, ppos, dist) {
 // ============================================================
 //  СМЕРТЬ / ВОСКРЕШЕНИЕ
 // ============================================================
-export function applyDamage(g, bot, dmg, dir, point) {
+export function applyDamage(g, bot, dmg, dir, point, meta = {}) {
   if (!bot || !bot.alive) return { killed: false };
-  bot.health -= dmg;
   bot.hitFlash = 1;
+  const result = applyEnemyDamage(g.state, bot, dmg, (event) => {
+    g.events?.emit('enemy:damaged', { bot, ...event, ...meta });
+  });
+  if (meta.debug) g.events?.emit('enemy:hit', { bot, ...result, ...meta });
 
   // кровь в точке попадания
   const p = point || bot.mesh.position;
@@ -774,17 +797,16 @@ export function applyDamage(g, bot, dmg, dir, point) {
     bot.mesh.position.x = rx; bot.mesh.position.z = rz;
   }
 
-  if (bot.health <= 0) {
-    bot.alive = false;
+  if (result.killed) {
     bot.state = 'dead';
     bot.deadT = 0; bot.fadeT = 0;
     bot.respawnT = 7.0;
     bot.moving = false;
     bot.burstLeft = 0;
     dropPickup(g, bot.mesh.position);   // враг роняет подсумки с патронами
-    return { killed: true };
+    return { ...result, ...meta, killed: true };
   }
-  return { killed: false };
+  return { ...result, ...meta, killed: false };
 }
 
 function setOpacity(b, op) {
@@ -935,6 +957,35 @@ function updateFlash(b, dt) {
   }
 }
 
+function separateBots() {
+  const minDistance = 0.7;
+  const minDistanceSquared = minDistance * minDistance;
+  for (let i = 0; i < bots.length; i += 1) {
+    const a = bots[i];
+    if (!a.alive || a.state === 'dead') continue;
+    for (let j = i + 1; j < bots.length; j += 1) {
+      const b = bots[j];
+      if (!b.alive || b.state === 'dead') continue;
+      let dx = b.mesh.position.x - a.mesh.position.x;
+      let dz = b.mesh.position.z - a.mesh.position.z;
+      const distanceSquared = dx * dx + dz * dz;
+      if (distanceSquared >= minDistanceSquared) continue;
+      if (distanceSquared < 1e-6) { dx = 1; dz = 0; }
+      else {
+        const distance = Math.sqrt(distanceSquared);
+        dx /= distance;
+        dz /= distance;
+      }
+      const distance = Math.sqrt(Math.max(distanceSquared, 1e-6));
+      const push = (minDistance - distance) * 0.5;
+      const aPos = resolveCircle(a.mesh.position.x - dx * push, a.mesh.position.z - dz * push, 0.35);
+      const bPos = resolveCircle(b.mesh.position.x + dx * push, b.mesh.position.z + dz * push, 0.35);
+      a.mesh.position.x = aPos[0]; a.mesh.position.z = aPos[1];
+      b.mesh.position.x = bPos[0]; b.mesh.position.z = bPos[1];
+    }
+  }
+}
+
 // ============================================================
 //  ГЛАВНЫЙ ЦИКЛ
 // ============================================================
@@ -966,7 +1017,7 @@ export function update(dt, g) {
     }
 
     if (playerAlive && canSee && dist < 45) {
-      if (b.state !== 'attack') { b.state = 'attack'; b.fireT = 0.4 + Math.random() * 0.5; }
+      if (b.state !== 'attack') { b.state = 'attack'; b.fireT = 1.1 + Math.random() * 0.8; }
       updateAttack(b, dt, ppos, dist);
     } else {
       if (b.state === 'attack') b.state = 'patrol';
@@ -976,4 +1027,5 @@ export function update(dt, g) {
     updateAnim(b, dt);
     updateFlash(b, dt);
   }
+  separateBots();
 }

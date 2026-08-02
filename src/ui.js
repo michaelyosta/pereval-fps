@@ -148,23 +148,25 @@ export function init(_g) {
     weaponName: $('#weapon-name'), reloadHint: $('#reload-hint'),
     crosshair: $('#crosshair'), hitmarker: $('#hitmarker'),
     damageVig: $('#damage-vig'), body: document.body,
-    healthFill: $('#health-fill')
+    healthFill: $('#health-fill'), debug: $('#debug-panel')
   };
   hud.weaponName.textContent = g.state.weaponName;
+  const quality = $('#quality');
+  if (quality) quality.value = g.quality;
 
   // события игры
-  g.events.onEnemyHit = (dmg, killed) => {
+  g.events.on('enemy:hit', ({ killed }) => {
     if (g.demo) return;
     sfx(killed ? 'kill' : 'hit', killed ? 0.9 : 0.6);
     hitmarkerTimer = killed ? 0.32 : 0.22;
     hud.hitmarker.classList.toggle('kill', !!killed);
     hud.hitmarker.classList.add('show');
     if (killed) addKillfeed('ВЫ', g.state.weaponName, 'ВРАГ');
-  };
-  g.events.onPlayerDamage = (dmg) => {
+  });
+  g.events.on('player:damaged', () => {
     damageFlash = 1;
     sfx('hurt', 0.7);
-  };
+  });
 
   // старт аудио по первому клику
   document.addEventListener('click', () => initAudio(), { once: true });
@@ -174,7 +176,12 @@ export function init(_g) {
 function addKillfeed(killer, weapon, victim) {
   const el = document.createElement('div');
   el.className = 'kf-entry';
-  el.innerHTML = `<b>${killer}</b> <span class="w">${weapon}</span> ▸ ${victim}`;
+  const killerEl = document.createElement('b');
+  killerEl.textContent = killer;
+  const weaponEl = document.createElement('span');
+  weaponEl.className = 'w';
+  weaponEl.textContent = weapon;
+  el.append(killerEl, document.createTextNode(' '), weaponEl, document.createTextNode(' ▸ '), document.createTextNode(victim));
   const feed = $('#killfeed');
   feed.prepend(el);
   kfItems.push(el);
@@ -187,8 +194,23 @@ export function update(dt, _g) {
   g = _g;
   if (!hud.kills) return;
 
+  if (hud.debug) {
+    const info = g.renderer?.info?.render || {};
+    $('#debug-fps').textContent = (g.debug?.fps || 0).toFixed(1);
+    $('#debug-frame').textContent = (g.debug?.frameTime || 0).toFixed(1);
+    $('#debug-calls').textContent = String(info.calls || 0);
+    $('#debug-triangles').textContent = String(info.triangles || 0);
+    $('#debug-spread').textContent = ((g.debug?.spread || 0) * 1000).toFixed(1);
+    $('#debug-recoil').textContent = (g.debug?.recoil || 0).toFixed(3);
+    $('#debug-lock').textContent = document.pointerLockElement ? 'locked' : (g.noLock ? 'fallback' : 'free');
+    $('#debug-pos').textContent = `${g.player.pos.x.toFixed(1)}, ${g.player.pos.y.toFixed(1)}, ${g.player.pos.z.toFixed(1)}`;
+    $('#debug-weapon').textContent = g.state.reloading ? 'reloading' : g.state.alive ? 'ready' : 'dead';
+  }
+
   // kills
   hud.kills.textContent = g.state.kills;
+  const target = $('#target-progress');
+  if (target) target.textContent = `${g.state.kills} / ${g.state.matchTarget}`;
 
   // здоровье
   if (hud.healthFill) {
