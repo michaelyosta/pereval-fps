@@ -153,3 +153,52 @@ test('survives a virtual twenty-minute normal-mode duration soak', async ({ page
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
 });
+
+test('completes a normal-mode balance profile with the full extraction duration', async ({ page }) => {
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+
+  await page.goto('/?mode=expedition&seed=normal-profile&watcher=1&debug=1');
+  await page.locator('#title').click();
+  await page.locator('#hideout-loadout').click();
+  await page.locator('#loadout-deploy').click();
+  await page.waitForTimeout(250);
+
+  await page.evaluate(() => {
+    for (let step = 0; step < 80; step += 1) {
+      if (step % 10 === 0)
+        window.__PEREVAL_DEBUG__?.recordNoise?.({ kind: 'shot', intensity: 2.5, duration: 2 });
+      window.__PEREVAL_DEBUG__?.tickRun?.(15);
+    }
+  });
+  const beforeObjective = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.());
+  expect(beforeObjective?.state).toBe('Exploration');
+  expect(beforeObjective?.run?.elapsedSeconds).toBeGreaterThanOrEqual(1200);
+  expect(beforeObjective?.run?.threat).toBeLessThanOrEqual(100);
+  expect(beforeObjective?.run?.anomaly).toBeLessThanOrEqual(100);
+
+  await page.evaluate(() => window.__PEREVAL_DEBUG__?.completeObjective?.());
+  const skillId = await page.evaluate(
+    () => window.__PEREVAL_DEBUG__?.getRunState?.().run?.skillOptions?.[0]?.id,
+  );
+  await page.evaluate((id) => window.__PEREVAL_DEBUG__?.chooseSkill?.(id), skillId);
+  await page.evaluate(() => window.__PEREVAL_DEBUG__?.startExtraction?.());
+  expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().run?.extraction?.duration)).toBe(
+    30,
+  );
+  await page.evaluate(() => window.__PEREVAL_DEBUG__?.tickRun?.(29, true));
+  expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().state)).toBe('Extracting');
+  expect(
+    await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().run?.extraction?.progress),
+  ).toBeGreaterThanOrEqual(28);
+  await page.evaluate(() => window.__PEREVAL_DEBUG__?.tickRun?.(2, true));
+  const result = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().run?.result);
+  expect(result?.status).toBe('success');
+  expect(result?.elapsedSeconds).toBeGreaterThanOrEqual(1230);
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+});

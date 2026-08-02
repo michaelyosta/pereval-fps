@@ -88,11 +88,11 @@ Modules receive the shared service object through `g.services`; there is no `win
 npm test                 # gameplay, ballistics, capsule collision, expedition services
 npm run lint
 npm run format:check
-npm run test:e2e         # lifecycle, seed passes, encounter spawn, combat, pause, demo
+npm run test:e2e         # lifecycle, seed passes, encounter spawn, balance profile, combat, pause, demo
 npm run benchmark        # writes docs/qa/final/benchmark.json and demo.png
 ```
 
-The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.60 FPS, 384.64 ms sampled frame time, 833 draw calls, 11,575 triangles, 51 resources, 3.64 MB encoded resource bytes, 336 geometries, and 41 textures. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
+The benchmark reports actual values from the current machine. The checked-in run used headless Chromium without assuming a discrete GPU: 2.57 FPS, 388.50 ms sampled frame time, 808 draw calls, 11,407 triangles, 51 resources, 3.64 MB encoded resource bytes, 342 geometries, and 41 textures. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
 
 The build currently emits one main JavaScript chunk of about 711.23 kB minified and 192.78 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
 

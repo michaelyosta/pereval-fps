@@ -197,10 +197,10 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
       ...options,
       position: options.position ?? { x: g.player.pos.x, z: g.player.pos.z },
     }) ?? new Map(),
-    tickRun: (seconds = 1) => {
+    tickRun: (seconds = 1, insideExtraction = false) => {
       if (!g.expedition?.run) return null;
       g.expedition.tick(seconds, {
-        insideExtraction: false,
+        insideExtraction,
         playerPosition: { x: g.player.pos.x, z: g.player.pos.z },
         playerNodeId: g.expedition.nodeForPosition({ x: g.player.pos.x, z: g.player.pos.z }),
       });

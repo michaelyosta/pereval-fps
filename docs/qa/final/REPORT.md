@@ -6,23 +6,23 @@ Branch: `codex/procedural-expedition`
 
 ## Verified commands
 
-| Check                  | Result                           |
-| ---------------------- | -------------------------------- |
-| `npm test`             | 38 passed                        |
-| `npm run lint`         | passed                           |
-| `npm run format:check` | passed                           |
-| `npm run build`        | passed                           |
-| `npm run test:e2e`     | 9 passed; no page/console errors |
-| `npm run benchmark`    | completed; JSON written          |
+| Check                  | Result                            |
+| ---------------------- | --------------------------------- |
+| `npm test`             | 38 passed                         |
+| `npm run lint`         | passed                            |
+| `npm run format:check` | passed                            |
+| `npm run build`        | passed                            |
+| `npm run test:e2e`     | 10 passed; no page/console errors |
+| `npm run benchmark`    | completed; JSON written           |
 
 ## Measured benchmark
 
 The checked-in benchmark is from `?mode=arena&demo=1&debug=1` at 1280×720 in headless Chromium on the local machine. It recorded:
 
-- first load: 664.10 ms
-- sample: 1,923.20 ms, 2.60 FPS, 384.64 ms sampled frame time
-- renderer: 833 calls, 11,575 triangles, 816 points, 0 lines
-- resources: 51 entries, 3,640,237 encoded bytes, 336 geometries, 41 textures
+- first load: 751.34 ms
+- sample: 1,942.50 ms, 2.57 FPS, 388.50 ms sampled frame time
+- renderer: 808 calls, 11,407 triangles, 816 points, 0 lines
+- resources: 51 entries, 3,640,312 encoded bytes, 342 geometries, 41 textures
 - page errors: none; console errors: none
 
 The production bundle measured 711.23 kB minified / 192.78 kB gzip in the same build.
@@ -33,7 +33,7 @@ The in-app browser visual check showed approximately 60 FPS and 16.7 ms frame ti
 
 The interface keeps the original military desert-base identity, warm low sun, teal shadow contrast, anomalous weapon motif, restrained HUD, and readable title treatment. The pause/settings overlay and victory screen share the same visual language. The generated concept image is preserved under `assets/concepts/` as a reference, while runtime materials remain procedural and local.
 
-The expedition E2E visual artifact is `docs/qa/expedition/seed-e2e.png`: a real seeded run entering the generated module layout, then completing an accelerated objective and extraction into the results overlay. The expedition E2E suite also verifies a pressure-triggered mid-run encounter, module-local polygon navigation with connector portals, persisted success/failure history, a real four-cycle restart/resource soak, and a virtual 20-minute normal-mode duration soak.
+The expedition E2E visual artifact is `docs/qa/expedition/seed-e2e.png`: a real seeded run entering the generated module layout, then completing an accelerated objective and extraction into the results overlay. The expedition E2E suite also verifies a pressure-triggered mid-run encounter, module-local polygon navigation with connector portals, persisted success/failure history, a real four-cycle restart/resource soak, a virtual 20-minute normal-mode duration soak, and a normal-mode balance profile that completes the full 30-second extraction duration.
 
 ## Known issues / next pass
 

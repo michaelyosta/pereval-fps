@@ -32,3 +32,5 @@ These are real Playwright `testMode=1` passes; `elapsedMs` is wall-clock browser
 | `high-threat`  | rifle   | 13,712 ms |        0.25 s |               3 |  26.16 |   25.31 | success |
 
 The suite also contains a normal-mode virtual duration soak (`normal-duration`). It advances 1,200 seconds of in-game time with `testMode=0`, injects periodic pressure signals, verifies that at least one dormant group is spawned through the runtime pipeline, and checks that threat/anomaly remain bounded. This is a timer/finite-budget soak, not a manual 20–30 minute balance assessment.
+
+The `normal-profile` browser case uses the same `testMode=0` path, advances 1,200 seconds, completes the objective, and completes the configured 30-second primary extraction through `RunManager.tick`. It is stronger lifecycle/timer evidence than an accelerated pass, but it remains simulated rather than a manual balance session.
