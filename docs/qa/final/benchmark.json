@@ -1,0 +1,43 @@
+{
+  "generatedAt": "2026-08-02T13:50:44.042Z",
+  "url": "http://127.0.0.1:4174/?demo=1&debug=1",
+  "firstLoadMs": 730.13,
+  "pageErrors": [],
+  "consoleErrors": [],
+  "elapsedMs": 1985.4,
+  "fps": 2.01,
+  "frameTimeMs": 496.35,
+  "renderer": {
+    "calls": 831,
+    "triangles": 11467,
+    "points": 816,
+    "lines": 0
+  },
+  "state": {
+    "health": 100,
+    "maxHealth": 100,
+    "alive": true,
+    "kills": 0,
+    "matchTarget": 5,
+    "matchWon": false,
+    "shots": 0,
+    "hits": 0,
+    "headshots": 0,
+    "damageTaken": 0,
+    "ammo": 30,
+    "reserve": 120,
+    "magSize": 30,
+    "weaponName": "ОБЛОМОК-7",
+    "reloading": false,
+    "time": 0.3,
+    "paused": false,
+    "player": {
+      "x": 0,
+      "y": 1.62,
+      "z": 14
+    },
+    "pointerLocked": false
+  },
+  "resourceCount": 24,
+  "encodedBytes": 2538441
+}
