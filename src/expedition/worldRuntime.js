@@ -98,6 +98,22 @@ export class GeneratedWorld {
     return this.spatialIndex;
   }
 
+  setDynamicObstacle(id, nodeId, obstacle) {
+    return this.navigationMesh?.setDynamicObstacle?.(id, nodeId, obstacle) ?? null;
+  }
+
+  updateDynamicObstacle(id, patch = {}) {
+    return this.navigationMesh?.updateDynamicObstacle?.(id, patch) ?? null;
+  }
+
+  removeDynamicObstacle(id) {
+    return this.navigationMesh?.removeDynamicObstacle?.(id) ?? false;
+  }
+
+  clearDynamicObstacles(nodeId = null) {
+    return this.navigationMesh?.clearDynamicObstacles?.(nodeId) ?? 0;
+  }
+
   dispose() {
     this.spatialIndex.clear();
     this.navigationMesh?.dispose?.();

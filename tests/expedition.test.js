@@ -175,6 +175,25 @@ describe('seeded expedition generation', () => {
       x: expect.any(Number),
       z: expect.any(Number),
     });
+
+    expect(
+      mesh.setDynamicObstacle('moving-crate', nodeId, {
+        x: 0,
+        z: -3,
+        hw: 1.1,
+        hd: 0.8,
+        rotation: Math.PI / 6,
+      }),
+    ).toMatchObject({ id: 'moving-crate', nodeId, dynamic: true });
+    expect(mesh.snapshot()).toMatchObject({ dynamicObstacleCount: 1, dynamicRotatedObstacleCount: 1 });
+    expect(mesh.isWalkable({ x: 0, z: -3 }, nodeId)).toBe(false);
+    expect(mesh.pathWithinNode(nodeId, { x: -6, z: -3 }, { x: 6, z: -3 }).length).toBeGreaterThan(1);
+    expect(mesh.updateDynamicObstacle('moving-crate', { x: 0, z: 3 })).toMatchObject({
+      source: expect.objectContaining({ x: 0, z: 3 }),
+    });
+    expect(mesh.isWalkable({ x: 0, z: -3 }, nodeId)).toBe(true);
+    expect(mesh.removeDynamicObstacle('moving-crate')).toBe(true);
+    expect(mesh.snapshot()).toMatchObject({ dynamicObstacleCount: 0 });
     mesh.dispose();
   });
 
@@ -187,11 +206,36 @@ describe('seeded expedition generation', () => {
     expect(result.colliders.length).toBeGreaterThan(world.modules.length);
     expect(result.colliders.every((collider) => collider.height > 0)).toBe(true);
     expect(result.colliders.some((collider) => collider.tag.includes('burned-vehicle'))).toBe(true);
+    expect(result.group.getObjectByName('expeditionFloors')).toBeTruthy();
+    expect(result.group.getObjectByName('expeditionFrames')).toBeTruthy();
+    expect(result.group.children.some((child) => child.name.startsWith('expeditionWalls:'))).toBe(true);
     expect(result.timings).toMatchObject({
       colliderBuildMs: expect.any(Number),
       moduleAssemblyMs: expect.any(Number),
       worldAssemblyMs: expect.any(Number),
     });
+    const dynamicNodeId = world.graph.startNodeId;
+    const dynamicPosition = world.graph.getNode(dynamicNodeId).position;
+    expect(
+      result.addDynamicObstacle({
+        id: 'assembler-dynamic-obstacle',
+        nodeId: dynamicNodeId,
+        x: dynamicPosition.x,
+        z: dynamicPosition.z,
+        hw: 0.8,
+        hd: 0.6,
+        rotation: Math.PI / 5,
+      }),
+    ).toMatchObject({ id: 'assembler-dynamic-obstacle', collider: { kind: 'dynamic-obstacle' } });
+    expect(world.navigationMesh.snapshot().dynamicObstacleCount).toBe(1);
+    expect(result.colliders.some((collider) => collider.kind === 'dynamic-obstacle')).toBe(true);
+    expect(
+      result.updateDynamicObstacle('assembler-dynamic-obstacle', { x: dynamicPosition.x + 1 }),
+    ).toMatchObject({
+      collider: { x: dynamicPosition.x + 1 },
+    });
+    expect(result.removeDynamicObstacle('assembler-dynamic-obstacle')).toBe(true);
+    expect(world.navigationMesh.snapshot().dynamicObstacleCount).toBe(0);
     expect(result.group.children.some((child) => child.userData.shootable)).toBe(true);
     expect(scene.getObjectByName('expeditionWorld')).toBeTruthy();
     assembler.dispose();

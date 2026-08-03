@@ -35,6 +35,40 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
   expect(navigationMesh?.polygonCount).toBe(navigationMesh?.regionCount * 2);
   expect(navigationMesh?.obstacleCount).toBeGreaterThan(0);
   expect(navigationMesh?.rotatedObstacleCount).toBeGreaterThan(0);
+  const dynamicObstacle = await page.evaluate(() => {
+    const map = window.__PEREVAL_DEBUG__?.getRunState?.().run?.map;
+    const node = map?.graph?.getNode?.(map?.graph?.startNodeId);
+    return node ? { nodeId: node.id, x: node.position.x, z: node.position.z } : null;
+  });
+  expect(dynamicObstacle).toBeTruthy();
+  expect(
+    await page.evaluate(
+      (options) =>
+        window.__PEREVAL_DEBUG__?.addDynamicObstacle?.({
+          id: 'e2e-moving-crate',
+          ...options,
+          hw: 0.7,
+          hd: 0.55,
+          rotation: Math.PI / 5,
+        }),
+      dynamicObstacle,
+    ),
+  ).toMatchObject({ id: 'e2e-moving-crate', dynamic: true });
+  expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getNavigationMeshState?.())).toMatchObject({
+    dynamicObstacleCount: 1,
+    dynamicRotatedObstacleCount: 1,
+  });
+  expect(
+    await page.evaluate(() =>
+      window.__PEREVAL_DEBUG__?.updateDynamicObstacle?.('e2e-moving-crate', { x: 1 }),
+    ),
+  ).toMatchObject({ collider: { x: 1 } });
+  expect(
+    await page.evaluate(() => window.__PEREVAL_DEBUG__?.removeDynamicObstacle?.('e2e-moving-crate')),
+  ).toBe(true);
+  expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getNavigationMeshState?.())).toMatchObject({
+    dynamicObstacleCount: 0,
+  });
   const performance = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getPerformanceState?.());
   expect(performance).toEqual(
     expect.objectContaining({

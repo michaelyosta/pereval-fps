@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T06:11:40.138Z",
+  "generatedAt": "2026-08-03T07:40:15.593Z",
   "scenario": { "seed": "rich-loot", "weapon": "shotgun", "watcher": false },
   "generation": {
     "seed": "rich-loot:world-attempt-0",
     "attempts": 1,
     "validation": { "valid": true, "errors": [] },
-    "timings": { "navCollisionBuildMs": 0.13, "worldGenerationMs": 0.84 }
+    "timings": { "navCollisionBuildMs": 0.14, "worldGenerationMs": 0.82 }
   },
   "summary": {
     "modules": 10,
@@ -294,12 +294,14 @@
     "regionCount": 10,
     "obstacleCount": 9,
     "rotatedObstacleCount": 9,
+    "dynamicObstacleCount": 0,
+    "dynamicRotatedObstacleCount": 0,
     "nodeCount": 10,
     "portalCount": 20,
     "indexedCellCount": 31
   },
   "knownLimitations": [
     "This structural export does not claim a manual 20–30 minute balance session.",
-    "Dynamic obstacles and arbitrary non-box geometry remain outside the authored rotated-box navmesh profile."
+    "These static seed exports do not simulate runtime dynamic-obstacle mutations; arbitrary non-box geometry remains outside the authored rotated-box navmesh profile."
   ]
 }

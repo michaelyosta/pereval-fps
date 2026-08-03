@@ -138,6 +138,8 @@ export class ExpeditionNavMesh {
     this.polygons = new Map();
     this.regions = new Map();
     this.obstacles = new Map();
+    this.dynamicObstacles = new Map();
+    this.dynamicObstacleRecords = new Map();
     this.nodeBounds = new Map();
     this.portals = new Map();
     this.cells = new Map();
@@ -268,13 +270,62 @@ export class ExpeditionNavMesh {
     if (!point || !nodeId) return false;
     return (
       (this.polygons.get(nodeId) ?? []).some((polygon) => polygon.contains(point)) &&
-      !(this.obstacles.get(nodeId) ?? []).some((obstacle) => pointInsideObstacle(point, obstacle))
+      !this.obstaclesForNode(nodeId).some((obstacle) => pointInsideObstacle(point, obstacle))
     );
+  }
+
+  obstaclesForNode(nodeId) {
+    return [
+      ...(this.obstacles.get(nodeId) ?? []),
+      ...[...(this.dynamicObstacles.get(nodeId)?.values() ?? [])],
+    ];
+  }
+
+  setDynamicObstacle(id, nodeId, obstacle) {
+    if (!id || !nodeId || !this.nodeBounds.has(nodeId) || !obstacle) return null;
+    this.removeDynamicObstacle(id);
+    const source = { ...obstacle };
+    const geometry = createObstacleGeometry(
+      source,
+      { x: source.x, z: source.z },
+      this.agentRadius + this.clearance,
+    );
+    const record = { id, nodeId, source, ...geometry, dynamic: true };
+    if (!this.dynamicObstacles.has(nodeId)) this.dynamicObstacles.set(nodeId, new Map());
+    this.dynamicObstacles.get(nodeId).set(id, record);
+    this.dynamicObstacleRecords.set(id, record);
+    return { ...record, source: { ...source } };
+  }
+
+  updateDynamicObstacle(id, patch = {}) {
+    const current = this.dynamicObstacleRecords.get(id);
+    if (!current) return null;
+    return this.setDynamicObstacle(id, patch.nodeId ?? current.nodeId, {
+      ...current.source,
+      ...patch,
+    });
+  }
+
+  removeDynamicObstacle(id) {
+    const current = this.dynamicObstacleRecords.get(id);
+    if (!current) return false;
+    this.dynamicObstacles.get(current.nodeId)?.delete(id);
+    if (this.dynamicObstacles.get(current.nodeId)?.size === 0) this.dynamicObstacles.delete(current.nodeId);
+    this.dynamicObstacleRecords.delete(id);
+    return true;
+  }
+
+  clearDynamicObstacles(nodeId = null) {
+    const ids = nodeId
+      ? [...(this.dynamicObstacles.get(nodeId)?.keys() ?? [])]
+      : [...this.dynamicObstacleRecords.keys()];
+    for (const id of ids) this.removeDynamicObstacle(id);
+    return ids.length;
   }
 
   pathWithinNode(nodeId, start, target) {
     const bounds = this.nodeBounds.get(nodeId);
-    const obstacles = this.obstacles.get(nodeId) ?? [];
+    const obstacles = this.obstaclesForNode(nodeId);
     if (!bounds || !start || !target) return target ? [clonePoint(target)] : [];
     if (segmentClear(start, target, bounds, obstacles)) return [clonePoint(target)];
 
@@ -363,6 +414,7 @@ export class ExpeditionNavMesh {
 
   snapshot() {
     const obstacles = [...this.obstacles.values()].flat();
+    const dynamicObstacles = [...this.dynamicObstacleRecords.values()];
     return {
       agentRadius: this.agentRadius,
       clearance: this.clearance,
@@ -370,6 +422,9 @@ export class ExpeditionNavMesh {
       regionCount: [...this.regions.values()].reduce((count, regions) => count + regions.length, 0),
       obstacleCount: obstacles.length,
       rotatedObstacleCount: obstacles.filter((obstacle) => !isAxisAlignedObstacle(obstacle)).length,
+      dynamicObstacleCount: dynamicObstacles.length,
+      dynamicRotatedObstacleCount: dynamicObstacles.filter((obstacle) => !isAxisAlignedObstacle(obstacle))
+        .length,
       nodeCount: this.nodeBounds.size,
       portalCount: this.portals.size,
       indexedCellCount: this.cells.size,
@@ -380,6 +435,8 @@ export class ExpeditionNavMesh {
     this.polygons.clear();
     this.regions.clear();
     this.obstacles.clear();
+    this.dynamicObstacles.clear();
+    this.dynamicObstacleRecords.clear();
     this.nodeBounds.clear();
     this.portals.clear();
     this.cells.clear();

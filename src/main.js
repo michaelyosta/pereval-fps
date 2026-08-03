@@ -182,6 +182,8 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
       },
     }),
     getNavigationMeshState: () => g.expedition?.run?.map?.navigationMesh?.snapshot?.() ?? null,
+    getNavigationPath: (nodeId, start, target) =>
+      g.expedition?.run?.map?.navigationMesh?.pathWithinNode?.(nodeId, start, target) ?? [],
     getPerformanceState: () => ({ ...(g.expedition?.run?.performance ?? {}) }),
     getRunState: () => g.expedition?.snapshot?.() ?? null,
     getEncounterState: () => g.expedition?.encounterDirector?.snapshot?.() ?? null,
@@ -220,6 +222,10 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
     shoot: () => mods.combat?.shoot(g, null),
     damagePlayer: (amount = 10) => g.damagePlayer(amount, { type: 'debug' }),
     restartRun: () => { restartMatch(); return g.expedition?.snapshot?.(); },
+    addDynamicObstacle: (options = {}) => g.expeditionScene?.addDynamicObstacle?.(options) ?? null,
+    updateDynamicObstacle: (id, patch = {}) => g.expeditionScene?.updateDynamicObstacle?.(id, patch) ?? null,
+    removeDynamicObstacle: (id) => g.expeditionScene?.removeDynamicObstacle?.(id) ?? false,
+    clearDynamicObstacles: (nodeId = null) => g.expeditionScene?.clearDynamicObstacles?.(nodeId) ?? 0,
     killNearestEnemy: () => {
       const bot = mods.bots?.getBots?.().find(
         (candidate) => candidate.alive && candidate.archetype !== 'watcher',

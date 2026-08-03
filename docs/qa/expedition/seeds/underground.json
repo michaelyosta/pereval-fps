@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T06:11:40.030Z",
+  "generatedAt": "2026-08-03T07:40:15.467Z",
   "scenario": { "seed": "underground", "weapon": "shotgun", "watcher": false },
   "generation": {
     "seed": "underground:world-attempt-0",
     "attempts": 1,
     "validation": { "valid": true, "errors": [] },
-    "timings": { "navCollisionBuildMs": 0.15, "worldGenerationMs": 0.99 }
+    "timings": { "navCollisionBuildMs": 0.16, "worldGenerationMs": 1.04 }
   },
   "summary": {
     "modules": 10,
@@ -284,12 +284,14 @@
     "regionCount": 10,
     "obstacleCount": 7,
     "rotatedObstacleCount": 7,
+    "dynamicObstacleCount": 0,
+    "dynamicRotatedObstacleCount": 0,
     "nodeCount": 10,
     "portalCount": 20,
     "indexedCellCount": 31
   },
   "knownLimitations": [
     "This structural export does not claim a manual 20–30 minute balance session.",
-    "Dynamic obstacles and arbitrary non-box geometry remain outside the authored rotated-box navmesh profile."
+    "These static seed exports do not simulate runtime dynamic-obstacle mutations; arbitrary non-box geometry remains outside the authored rotated-box navmesh profile."
   ]
 }
