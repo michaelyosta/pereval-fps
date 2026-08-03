@@ -848,11 +848,37 @@ function updateNavigationPatrol(b, dt) {
   if (!manager?.run || !planner) return false;
   const playerNodeId = manager.nodeForPosition({ x: gRef.player.pos.x, z: gRef.player.pos.z });
   const currentNodeId = manager.nodeForPosition({ x: b.mesh.position.x, z: b.mesh.position.z }) ?? b.expeditionNodeId;
-  if (!playerNodeId || !currentNodeId || playerNodeId === currentNodeId) {
+  if (!playerNodeId || !currentNodeId) {
     b.navigationAgent = null;
     return false;
   }
   if (!b.navigationAgent) b.navigationAgent = new NavigationAgent(planner, navigationMesh);
+
+  if (playerNodeId === currentNodeId) {
+    const waypoint = b.navigationAgent.localWaypoint(
+      currentNodeId,
+      { x: b.mesh.position.x, z: b.mesh.position.z },
+      { x: gRef.player.pos.x, z: gRef.player.pos.z },
+      0.85,
+    );
+    if (!waypoint) {
+      b.moving = false;
+      return true;
+    }
+    _v1.set(waypoint.x - b.mesh.position.x, 0, waypoint.z - b.mesh.position.z);
+    const distance = _v1.length();
+    if (distance <= 0.05) {
+      b.moving = false;
+      return true;
+    }
+    _v1.multiplyScalar(1 / distance);
+    turnToward(b, Math.atan2(_v1.x, _v1.z), 5, dt);
+    const ok = moveBot(b, _v1.x * b.speed, _v1.z * b.speed, dt);
+    b.moving = ok;
+    if (!ok) b.navigationAgent = null;
+    return true;
+  }
+
   b.navigationAgent.setTarget(currentNodeId, playerNodeId);
   const waypoint = b.navigationAgent.waypoint(
     currentNodeId,

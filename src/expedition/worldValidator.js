@@ -1,4 +1,5 @@
 import { connectorRouteIsValid } from './navigation.js';
+import { createObstacleGeometry, obstacleOverlapsLocalPoint } from './obstacleGeometry.js';
 
 function boundsOverlap(a, b, padding = 0.25) {
   return (
@@ -14,10 +15,7 @@ function findConnector(instance, id) {
 }
 
 function obstacleOverlapsPoint(obstacle, point, margin = 0.35) {
-  return (
-    Math.abs(point.x - obstacle.x) < obstacle.hw + margin &&
-    Math.abs(point.z - obstacle.z) < obstacle.hd + margin
-  );
+  return obstacleOverlapsLocalPoint(obstacle, point, margin);
 }
 
 export class WorldValidator {
@@ -83,13 +81,14 @@ export class WorldValidator {
       for (const { instance } of graph.nodes.values()) {
         const definition = instance.definition;
         for (const obstacle of definition.obstacles ?? []) {
+          const geometry = createObstacleGeometry(obstacle);
           if (
             obstacle.hw <= 0 ||
             obstacle.hd <= 0 ||
-            obstacle.x - obstacle.hw < definition.bounds.minX ||
-            obstacle.x + obstacle.hw > definition.bounds.maxX ||
-            obstacle.z - obstacle.hd < definition.bounds.minZ ||
-            obstacle.z + obstacle.hd > definition.bounds.maxZ
+            geometry.minX < definition.bounds.minX ||
+            geometry.maxX > definition.bounds.maxX ||
+            geometry.minZ < definition.bounds.minZ ||
+            geometry.maxZ > definition.bounds.maxZ
           ) {
             errors.push(`obstacle outside module bounds: ${definition.id}/${obstacle.tag ?? 'obstacle'}`);
           }

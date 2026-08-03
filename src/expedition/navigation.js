@@ -120,6 +120,8 @@ export class NavigationAgent {
     this.localWaypointIndex = 0;
     this.localPath = null;
     this.localPathTransition = null;
+    this.mode = 'idle';
+    this.localPathLength = 0;
   }
 
   setTarget(currentNodeId, targetNodeId) {
@@ -132,6 +134,8 @@ export class NavigationAgent {
     this.localWaypointIndex = 0;
     this.localPath = null;
     this.localPathTransition = null;
+    this.mode = 'route';
+    this.localPathLength = 0;
     this.route =
       currentNodeId && targetNodeId && currentNodeId !== targetNodeId
         ? (this.planner?.plan(currentNodeId, targetNodeId) ?? null)
@@ -139,8 +143,21 @@ export class NavigationAgent {
     return this.route;
   }
 
+  localWaypoint(nodeId, position, targetPosition, radius = 0.85) {
+    if (!nodeId || !position || !targetPosition || !this.navigationMesh?.pathWithinNode) return null;
+    const path = this.navigationMesh.pathWithinNode(nodeId, position, targetPosition);
+    this.mode = 'local';
+    this.localPathLength = path.length;
+    for (const point of path) {
+      if (Math.hypot(position.x - point.x, position.z - point.z) > radius)
+        return { ...point, phase: 'local' };
+    }
+    return null;
+  }
+
   waypoint(currentNodeId, position, radius = 0.85) {
     if (!this.route) return null;
+    this.mode = 'route';
     this.currentNodeId = currentNodeId;
     while (this.transitionIndex < this.route.transitions.length) {
       const transition = this.route.transitions[this.transitionIndex];
@@ -201,6 +218,8 @@ export class NavigationAgent {
       transitionIndex: this.transitionIndex,
       crossingIndex: this.crossingIndex,
       localWaypointIndex: this.localWaypointIndex,
+      mode: this.mode,
+      localPathLength: this.localPathLength,
       nodes: this.route?.nodes ? [...this.route.nodes] : [],
     };
   }

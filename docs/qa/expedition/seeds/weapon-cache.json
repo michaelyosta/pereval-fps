@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T05:53:11.748Z",
+  "generatedAt": "2026-08-03T06:11:40.056Z",
   "scenario": { "seed": "weapon-cache", "weapon": "oblomok-7", "watcher": false },
   "generation": {
     "seed": "weapon-cache:world-attempt-0",
     "attempts": 1,
     "validation": { "valid": true, "errors": [] },
-    "timings": { "navCollisionBuildMs": 0.21, "worldGenerationMs": 0.88 }
+    "timings": { "navCollisionBuildMs": 0.16, "worldGenerationMs": 0.93 }
   },
   "summary": {
     "modules": 11,
@@ -310,15 +310,16 @@
   "navigationMesh": {
     "agentRadius": 0.35,
     "clearance": 0.2,
-    "polygonCount": 70,
-    "regionCount": 35,
+    "polygonCount": 22,
+    "regionCount": 11,
     "obstacleCount": 8,
+    "rotatedObstacleCount": 8,
     "nodeCount": 11,
     "portalCount": 22,
     "indexedCellCount": 33
   },
   "knownLimitations": [
     "This structural export does not claim a manual 20–30 minute balance session.",
-    "Dynamic and rotated arbitrary geometry remain outside the authored axis-aligned navmesh profile."
+    "Dynamic obstacles and arbitrary non-box geometry remain outside the authored rotated-box navmesh profile."
   ]
 }

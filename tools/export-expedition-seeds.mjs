@@ -78,7 +78,7 @@ for (const scenario of scenarios) {
     navigationMesh: world.navigationMesh.snapshot(),
     knownLimitations: [
       'This structural export does not claim a manual 20–30 minute balance session.',
-      'Dynamic and rotated arbitrary geometry remain outside the authored axis-aligned navmesh profile.',
+      'Dynamic obstacles and arbitrary non-box geometry remain outside the authored rotated-box navmesh profile.',
     ],
   };
   const output = await prettier.format(JSON.stringify(report), { parser: 'json', printWidth: 110 });

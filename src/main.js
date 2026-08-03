@@ -11,7 +11,6 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { EventBus } from './core/EventBus.js';
 import { damagePlayer as applyPlayerDamage, respawnPlayer as resetPlayerState } from './core/gameplay.js';
 import { resolveCapsuleMotion } from './core/collision.js';
-import * as worldModule from './world.js';
 import * as combatModule from './combat.js';
 import * as botsModule from './bots.js';
 import * as uiModule from './ui.js';
@@ -93,7 +92,7 @@ bloom.strength = quality.bloom;
 grainPass.uniforms.amount.value = quality.grain;
 
 // ---------- контракт GAME ----------
-const mods = { world: worldModule, combat: combatModule, bots: botsModule, ui: uiModule };
+const mods = { world: null, combat: combatModule, bots: botsModule, ui: uiModule };
 const campaignStorage = (() => {
   try { return window.localStorage; } catch { return null; }
 })();
@@ -1038,6 +1037,7 @@ window.addEventListener('resize', () => {
 
 // ---------- старт ----------
 async function boot() {
+  if (LEGACY_ARENA) mods.world = await import('./world.js');
   if (g.expedition) {
     g.expedition.start();
     g.expedition.onChange((event) => {

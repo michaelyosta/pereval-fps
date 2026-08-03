@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { GenerationContext, SeededRandom } from '../src/core/expedition/SeededRandom.js';
 import { RunManager } from '../src/core/expedition/RunManager.js';
 import { RunState } from '../src/core/expedition/runTypes.js';
-import { LevelModuleRegistry } from '../src/expedition/levelModules.js';
+import { LevelModuleDefinition, LevelModuleRegistry } from '../src/expedition/levelModules.js';
+import { ModuleInstance, WorldGraph } from '../src/expedition/worldGraph.js';
 import { WorldGenerator } from '../src/expedition/worldGenerator.js';
 import { WorldValidator } from '../src/expedition/worldValidator.js';
 import { ExtractionSystem } from '../src/expedition/extraction.js';
@@ -127,9 +128,7 @@ describe('seeded expedition generation', () => {
     )?.[0];
     const obstacle = first.navigationMesh.obstacles.get(obstacleNodeId)?.[0];
     expect(obstacleNodeId).toBeTruthy();
-    expect(
-      first.navigationMesh.isWalkable({ x: obstacle.minX + 0.5, z: obstacle.minZ + 0.5 }, obstacleNodeId),
-    ).toBe(false);
+    expect(first.navigationMesh.isWalkable({ x: obstacle.x, z: obstacle.z }, obstacleNodeId)).toBe(false);
     const obstaclePath = first.navigationMesh.pathWithinNode(
       obstacleNodeId,
       { x: obstacle.minX - 2, z: obstacle.minZ - 2 },
@@ -147,6 +146,36 @@ describe('seeded expedition generation', () => {
     expect(assembled.colliders).toHaveLength(world.modules.length);
     expect(world.spatialIndex.nearest({ x: 0, z: 0 }, 20)?.moduleId).toBe('border_checkpoint');
     expect(world.spatialIndex.query({ minX: -10, maxX: 10, minZ: -10, maxZ: 10 }).length).toBeGreaterThan(0);
+  });
+
+  it('routes around a rotated authored obstacle and supports same-module local following', () => {
+    const definition = new LevelModuleDefinition({
+      id: 'rotated-obstacle-test',
+      category: 'interior',
+      size: { x: 20, z: 20 },
+      bounds: { minX: -10, maxX: 10, minZ: -10, maxZ: 10 },
+      connectors: [],
+      obstacles: [{ x: 0, z: 0, hw: 2, hd: 0.75, rotation: Math.PI / 4 }],
+    });
+    const graph = new WorldGraph();
+    const nodeId = graph.addNode(new ModuleInstance(definition, { x: 0, z: 0 }, 0));
+    const mesh = new ExpeditionNavMesh(graph, { agentRadius: 0, clearance: 0 });
+    expect(mesh.isWalkable({ x: 0, z: 0 }, nodeId)).toBe(false);
+
+    const start = { x: -6, z: 0 };
+    const target = { x: 6, z: 0 };
+    const path = mesh.pathWithinNode(nodeId, start, target);
+    expect(path.length).toBeGreaterThan(1);
+    expect(path.every((point) => mesh.isWalkable(point, nodeId))).toBe(true);
+    expect(path.at(-1)).toEqual(target);
+
+    const agent = new NavigationAgent(null, mesh);
+    expect(agent.localWaypoint(nodeId, start, target, 0.85)).toMatchObject({
+      phase: 'local',
+      x: expect.any(Number),
+      z: expect.any(Number),
+    });
+    mesh.dispose();
   });
 
   it('assembles and disposes a seed-dependent Three.js module scene', () => {

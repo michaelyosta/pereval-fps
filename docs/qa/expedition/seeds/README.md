@@ -47,3 +47,4 @@ The `normal-profile` browser case uses the same `testMode=0` path, advances 1,20
 | `balance-watcher`  | rifle   | on      |       1,231.45 s |               3 | success |
 
 These are stronger lifecycle/timer evidence than an accelerated pass, but remain simulated rather than manual balance sessions.
+The current navmesh evidence also includes rotated authored boxes. Dynamic obstacles and arbitrary non-box geometry remain outside this profile.

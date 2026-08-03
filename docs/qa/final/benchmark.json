@@ -1,20 +1,20 @@
 {
-  "generatedAt": "2026-08-03T05:53:25.559Z",
+  "generatedAt": "2026-08-03T06:15:53.761Z",
   "url": "http://127.0.0.1:4174/?mode=expedition&seed=benchmark&watcher=1&debug=1",
-  "firstLoadMs": 704.75,
+  "firstLoadMs": 637.83,
   "pageErrors": [],
   "consoleErrors": [],
-  "elapsedMs": 1663,
-  "fps": 4.21,
-  "frameTimeMs": 237.57,
+  "elapsedMs": 1555.3,
+  "fps": 7.72,
+  "frameTimeMs": 129.61,
   "renderer": {
-    "calls": 246,
-    "triangles": 3517,
-    "points": 816,
+    "calls": 100,
+    "triangles": 1271,
+    "points": 316,
     "lines": 36,
     "memory": {
-      "geometries": 306,
-      "textures": 39
+      "geometries": 104,
+      "textures": 21
     }
   },
   "state": {
@@ -33,7 +33,7 @@
     "magSize": 8,
     "weaponName": "ОБЛОМОК-7",
     "reloading": false,
-    "time": 0.5499999999999999,
+    "time": 0.9000000000000002,
     "paused": false,
     "player": {
       "x": 0,
@@ -43,13 +43,13 @@
     "pointerLocked": true
   },
   "runPerformance": {
-    "navCollisionBuildMs": 2.1,
-    "worldGenerationMs": 5.6,
-    "runResetMs": 6.7,
+    "navCollisionBuildMs": 0.7,
+    "worldGenerationMs": 3.7,
+    "runResetMs": 4.6,
     "colliderBuildMs": 0.2,
-    "moduleAssemblyMs": 3.3,
-    "worldAssemblyMs": 6
+    "moduleAssemblyMs": 3.5,
+    "worldAssemblyMs": 6.6
   },
   "resourceCount": 51,
-  "encodedBytes": 3706026
+  "encodedBytes": 3413656
 }

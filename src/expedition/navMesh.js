@@ -1,3 +1,10 @@
+import {
+  createObstacleGeometry,
+  obstacleCorners,
+  pointInsideObstacle,
+  segmentIntersectsObstacle,
+} from './obstacleGeometry.js';
+
 const DEFAULT_AGENT_RADIUS = 0.35;
 const DEFAULT_CLEARANCE = 0.2;
 
@@ -33,14 +40,13 @@ function insetBounds(bounds, inset) {
 }
 
 function obstacleBounds(instance, obstacle, inset) {
-  const center = instance.worldPoint(obstacle);
-  return {
-    minX: center.x - obstacle.hw - inset,
-    maxX: center.x + obstacle.hw + inset,
-    minZ: center.z - obstacle.hd - inset,
-    maxZ: center.z + obstacle.hd + inset,
-    tag: obstacle.tag ?? 'obstacle',
-  };
+  return createObstacleGeometry(obstacle, instance.worldPoint(obstacle), inset);
+}
+
+function isAxisAlignedObstacle(obstacle) {
+  return (
+    Math.abs(Math.sin(obstacle.rotation ?? 0)) <= 1e-6 || Math.abs(Math.cos(obstacle.rotation ?? 0)) <= 1e-6
+  );
 }
 
 function overlaps(a, b) {
@@ -61,10 +67,6 @@ function splitRectangle(rect, obstacle) {
   return pieces.filter((piece) => piece.minX < piece.maxX && piece.minZ < piece.maxZ);
 }
 
-function pointInsideRect(point, rect) {
-  return point.x > rect.minX && point.x < rect.maxX && point.z > rect.minZ && point.z < rect.maxZ;
-}
-
 function distanceToRect(point, rect) {
   const x = Math.max(rect.minX, Math.min(point.x, rect.maxX));
   const z = Math.max(rect.minZ, Math.min(point.z, rect.maxZ));
@@ -72,6 +74,18 @@ function distanceToRect(point, rect) {
 }
 
 function segmentClear(start, end, bounds, obstacles) {
+  if (
+    start.x < bounds.minX ||
+    start.x > bounds.maxX ||
+    start.z < bounds.minZ ||
+    start.z > bounds.maxZ ||
+    end.x < bounds.minX ||
+    end.x > bounds.maxX ||
+    end.z < bounds.minZ ||
+    end.z > bounds.maxZ ||
+    obstacles.some((obstacle) => segmentIntersectsObstacle(start, end, obstacle))
+  )
+    return false;
   const length = distance(start, end);
   const steps = Math.max(1, Math.ceil(length / 0.25));
   for (let index = 0; index <= steps; index += 1) {
@@ -80,13 +94,7 @@ function segmentClear(start, end, bounds, obstacles) {
       x: start.x + (end.x - start.x) * t,
       z: start.z + (end.z - start.z) * t,
     };
-    if (
-      point.x < bounds.minX ||
-      point.x > bounds.maxX ||
-      point.z < bounds.minZ ||
-      point.z > bounds.maxZ ||
-      obstacles.some((obstacle) => pointInsideRect(point, obstacle))
-    )
+    if (point.x < bounds.minX || point.x > bounds.maxX || point.z < bounds.minZ || point.z > bounds.maxZ)
       return false;
   }
   return true;
@@ -146,7 +154,7 @@ export class ExpeditionNavMesh {
         obstacleBounds(record.instance, obstacle, this.agentRadius + this.clearance),
       );
       let regions = [bounds];
-      for (const obstacle of obstacleRects)
+      for (const obstacle of obstacleRects.filter(isAxisAlignedObstacle))
         regions = regions.flatMap((region) => splitRectangle(region, obstacle));
       this.obstacles.set(nodeId, obstacleRects);
       this.regions.set(nodeId, regions);
@@ -258,7 +266,10 @@ export class ExpeditionNavMesh {
 
   isWalkable(point, nodeId = this.nodeForPosition(point)) {
     if (!point || !nodeId) return false;
-    return (this.polygons.get(nodeId) ?? []).some((polygon) => polygon.contains(point));
+    return (
+      (this.polygons.get(nodeId) ?? []).some((polygon) => polygon.contains(point)) &&
+      !(this.obstacles.get(nodeId) ?? []).some((obstacle) => pointInsideObstacle(point, obstacle))
+    );
   }
 
   pathWithinNode(nodeId, start, target) {
@@ -270,19 +281,14 @@ export class ExpeditionNavMesh {
     const points = [clonePoint(start), clonePoint(target)];
     const cornerOffset = 0.12;
     for (const obstacle of obstacles) {
-      const corners = [
-        { x: obstacle.minX - cornerOffset, z: obstacle.minZ - cornerOffset },
-        { x: obstacle.maxX + cornerOffset, z: obstacle.minZ - cornerOffset },
-        { x: obstacle.maxX + cornerOffset, z: obstacle.maxZ + cornerOffset },
-        { x: obstacle.minX - cornerOffset, z: obstacle.maxZ + cornerOffset },
-      ];
+      const corners = obstacleCorners(obstacle, cornerOffset);
       for (const corner of corners) {
         if (
           corner.x > bounds.minX &&
           corner.x < bounds.maxX &&
           corner.z > bounds.minZ &&
           corner.z < bounds.maxZ &&
-          !obstacles.some((other) => pointInsideRect(corner, other))
+          !obstacles.some((other) => pointInsideObstacle(corner, other, 0.01))
         )
           points.push(corner);
       }
@@ -356,12 +362,14 @@ export class ExpeditionNavMesh {
   }
 
   snapshot() {
+    const obstacles = [...this.obstacles.values()].flat();
     return {
       agentRadius: this.agentRadius,
       clearance: this.clearance,
       polygonCount: [...this.polygons.values()].reduce((count, polygons) => count + polygons.length, 0),
       regionCount: [...this.regions.values()].reduce((count, regions) => count + regions.length, 0),
-      obstacleCount: [...this.obstacles.values()].reduce((count, obstacles) => count + obstacles.length, 0),
+      obstacleCount: obstacles.length,
+      rotatedObstacleCount: obstacles.filter((obstacle) => !isAxisAlignedObstacle(obstacle)).length,
       nodeCount: this.nodeBounds.size,
       portalCount: this.portals.size,
       indexedCellCount: this.cells.size,

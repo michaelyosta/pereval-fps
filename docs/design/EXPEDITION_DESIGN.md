@@ -32,4 +32,4 @@ EncounterDirector reserves a finite initial budget, then schedules dormant seede
 
 ## Deferred systems
 
-The current milestone intentionally keeps the whole generated world loaded and uses authored box colliders plus a module-local polygon navmesh. Visual weapon models and audio are shared procedural adapters; dynamic/rotated obstacle baking, replacing them with authored assets, code splitting, and draw-call-heavy decoration profiling are deferred.
+The current milestone intentionally keeps the whole generated world loaded and uses authored box colliders plus a module-local polygon navmesh. Visual weapon models and audio are shared procedural adapters; dynamic obstacle baking, arbitrary non-box geometry, replacing them with authored assets, deeper code splitting, and draw-call-heavy decoration profiling are deferred. Authored rotated boxes now use oriented visibility checks and corners, and bots can follow a local visibility path when they share a module with the player.
