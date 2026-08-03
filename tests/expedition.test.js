@@ -108,6 +108,7 @@ describe('seeded expedition generation', () => {
     expect(meshSnapshot.polygonCount).toBe(meshSnapshot.regionCount * 2);
     expect(meshSnapshot.obstacleCount).toBeGreaterThan(0);
     expect(first.navigationMesh.validateRoute(first.navigation.main)).toBe(true);
+    expect(first.enemyGroups.filter((group) => group.archetype === 'watcher')).toHaveLength(1);
     const navigationMesh = new ExpeditionNavMesh(first.graph);
     expect(navigationMesh.nodeForPosition(first.graph.getNode(first.graph.startNodeId).position)).toBe(
       first.graph.startNodeId,

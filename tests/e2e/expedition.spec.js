@@ -203,3 +203,64 @@ test('completes a normal-mode balance profile with the full extraction duration'
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
 });
+
+test('completes three normal-mode seeded balance profiles', async ({ page }) => {
+  test.setTimeout(180_000);
+  const scenarios = [
+    ['balance-fast', 'pistol', 0],
+    ['balance-optional', 'shotgun', 1],
+    ['balance-watcher', 'rifle', 1],
+  ];
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+  const profiles = [];
+
+  for (const [seed, weapon, watcher] of scenarios) {
+    await page.goto(`/?mode=expedition&seed=${seed}&watcher=${watcher}&debug=1`);
+    await page.locator('#title').click();
+    await page.locator('#hideout-loadout').click();
+    await page.locator('#loadout-weapon').selectOption(weapon);
+    await page.locator('#loadout-deploy').click();
+    await expect
+      .poll(async () => page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().state))
+      .toBe('Exploration');
+    await page.evaluate(() => {
+      for (let step = 0; step < 80; step += 1) {
+        if (step % 10 === 0)
+          window.__PEREVAL_DEBUG__?.recordNoise?.({ kind: 'shot', intensity: 2.5, duration: 2 });
+        window.__PEREVAL_DEBUG__?.tickRun?.(15);
+      }
+    });
+    const beforeObjective = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.());
+    expect(beforeObjective?.state).toBe('Exploration');
+    expect(beforeObjective?.run?.elapsedSeconds).toBeGreaterThanOrEqual(1200);
+    await page.evaluate(() => window.__PEREVAL_DEBUG__?.completeObjective?.());
+    const skillId = await page.evaluate(
+      () => window.__PEREVAL_DEBUG__?.getRunState?.().run?.skillOptions?.[0]?.id,
+    );
+    await page.evaluate((id) => window.__PEREVAL_DEBUG__?.chooseSkill?.(id), skillId);
+    await page.evaluate(() => window.__PEREVAL_DEBUG__?.startExtraction?.());
+    await page.evaluate(() => window.__PEREVAL_DEBUG__?.tickRun?.(31, true));
+    const result = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().run?.result);
+    profiles.push({
+      seed,
+      weapon,
+      watcher,
+      elapsedSeconds: result?.elapsedSeconds,
+      status: result?.status,
+      objective: result?.stats?.objectivesCompleted,
+    });
+    expect(result?.status).toBe('success');
+    expect(result?.elapsedSeconds).toBeGreaterThanOrEqual(1230);
+  }
+
+  console.log(JSON.stringify({ type: 'normal-balance-profiles', profiles }));
+  expect(profiles).toHaveLength(3);
+  expect(new Set(profiles.map((profile) => profile.seed)).size).toBe(3);
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+});

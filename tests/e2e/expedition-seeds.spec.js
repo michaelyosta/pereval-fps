@@ -3,12 +3,17 @@ import { expect, test } from '@playwright/test';
 test.setTimeout(120_000);
 
 const scenarios = [
-  ['short-linear', 'pistol'],
-  ['underground', 'shotgun'],
-  ['high-threat', 'rifle'],
+  ['short-linear', 'pistol', 0],
+  ['branching', 'rifle', 0],
+  ['underground', 'shotgun', 0],
+  ['weapon-cache', 'oblomok-7', 0],
+  ['watcher', 'rifle', 1],
+  ['high-threat', 'oblomok-7', 1],
+  ['low-loot', 'pistol', 0],
+  ['rich-loot', 'shotgun', 0],
 ];
 
-for (const [seed, weapon] of scenarios) {
+for (const [seed, weapon, watcher] of scenarios) {
   test(`completes seeded QA run ${seed} with ${weapon}`, async ({ page }) => {
     const startedAt = Date.now();
     const pageErrors = [];
@@ -18,7 +23,7 @@ for (const [seed, weapon] of scenarios) {
       if (message.type() === 'error') consoleErrors.push(message.text());
     });
 
-    await page.goto(`/?mode=expedition&seed=${seed}&testMode=1&watcher=0&debug=1`);
+    await page.goto(`/?mode=expedition&seed=${seed}&testMode=1&watcher=${watcher}&debug=1`);
     await page.locator('#title').click();
     await page.locator('#hideout-loadout').click();
     await page.locator('#loadout-weapon').selectOption(weapon);
@@ -29,6 +34,16 @@ for (const [seed, weapon] of scenarios) {
     const before = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.());
     expect(before?.run?.map?.modules?.length).toBeGreaterThanOrEqual(10);
     expect(before?.run?.config?.seed?.display).toBe(seed);
+    await page.screenshot({ path: `docs/qa/expedition/seeds/${seed}.png`, fullPage: true });
+    if (watcher) {
+      await page.evaluate(() => {
+        window.__PEREVAL_DEBUG__?.recordNoise?.({ kind: 'shot', intensity: 4, duration: 2 });
+        window.__PEREVAL_DEBUG__?.tickRun?.(0.2);
+      });
+      const watcherState = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.().run?.watcher);
+      expect(watcherState?.state).toBe('stalking');
+      expect(watcherState?.candidateId).toBeTruthy();
+    }
 
     await page.evaluate(() => window.__PEREVAL_DEBUG__?.completeObjective?.());
     const skillId = await page.evaluate(

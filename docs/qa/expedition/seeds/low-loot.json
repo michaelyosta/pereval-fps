@@ -1,0 +1,312 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-03T05:33:19.384Z",
+  "scenario": { "seed": "low-loot", "weapon": "pistol", "watcher": false },
+  "generation": {
+    "seed": "low-loot:world-attempt-0",
+    "attempts": 1,
+    "validation": { "valid": true, "errors": [] }
+  },
+  "summary": {
+    "modules": 11,
+    "mainPathLength": 9,
+    "objectivePathLength": 6,
+    "branchCount": 2,
+    "lootContainers": 16,
+    "enemyGroups": 13,
+    "watcherGroups": 1,
+    "events": 6,
+    "obstacleCount": 10
+  },
+  "objective": {
+    "id": "extract-sample",
+    "title": "Извлечь образец",
+    "type": "extract-sample",
+    "nodeIds": ["field_laboratory-5"],
+    "steps": [
+      { "id": "unlock-container", "label": "Разблокировать контейнер", "nodeId": "field_laboratory-5" },
+      { "id": "take-sample", "label": "Забрать образец", "nodeId": "field_laboratory-5" },
+      { "id": "stabilize-zone", "label": "Пережить изменение зоны", "nodeId": "field_laboratory-5" }
+    ],
+    "currentStep": 0,
+    "completed": false
+  },
+  "extraction": {
+    "primaryNodeId": "extraction_zone-8",
+    "alternativeNodeId": "exposed_yard-9",
+    "primaryPath": [
+      "border_checkpoint-0",
+      "central_courtyard-1",
+      "warehouse-2",
+      "barracks-3",
+      "repair_hangar-4",
+      "field_laboratory-5",
+      "container_terminal-6",
+      "watchtower-7",
+      "extraction_zone-8"
+    ],
+    "alternativePath": ["border_checkpoint-0", "central_courtyard-1", "warehouse-2", "exposed_yard-9"]
+  },
+  "events": [
+    { "id": "event-0-0", "type": "armory", "nodeId": "repair_hangar-4", "optional": true },
+    { "id": "event-0-1", "type": "anomaly-nest", "nodeId": "warehouse-2", "optional": true },
+    { "id": "event-0-2", "type": "rare-cache", "nodeId": "extraction_zone-8", "optional": true },
+    { "id": "event-0-3", "type": "blocked-route", "nodeId": "watchtower-7", "optional": true },
+    { "id": "event-0-4", "type": "blackout-room", "nodeId": "container_terminal-6", "optional": true },
+    { "id": "event-0-5", "type": "distress-signal", "nodeId": "barracks-3", "optional": true }
+  ],
+  "modules": [
+    {
+      "id": "border_checkpoint-0",
+      "moduleId": "border_checkpoint",
+      "role": "start",
+      "label": "Стартовый пограничный блокпост",
+      "category": "start",
+      "difficulty": 1,
+      "tags": ["start", "resource", "safe"],
+      "position": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "id": "central_courtyard-1",
+      "moduleId": "central_courtyard",
+      "role": "hub",
+      "label": "Центральный двор",
+      "category": "hub",
+      "difficulty": 2,
+      "tags": ["hub", "branch", "combat"],
+      "position": { "x": 24, "y": 0, "z": 0 }
+    },
+    {
+      "id": "warehouse-2",
+      "moduleId": "warehouse",
+      "role": "main-route",
+      "label": "Склад",
+      "category": "industrial",
+      "difficulty": 2,
+      "tags": ["industrial", "loot", "noise"],
+      "position": { "x": 48, "y": 0, "z": 0 }
+    },
+    {
+      "id": "barracks-3",
+      "moduleId": "barracks",
+      "role": "main-route",
+      "label": "Казарма",
+      "category": "interior",
+      "difficulty": 2,
+      "tags": ["interior", "medical", "close"],
+      "position": { "x": 72, "y": 0, "z": 0 }
+    },
+    {
+      "id": "repair_hangar-4",
+      "moduleId": "repair_hangar",
+      "role": "main-route",
+      "label": "Ремонтный ангар",
+      "category": "industrial",
+      "difficulty": 3,
+      "tags": ["industrial", "large", "resource"],
+      "position": { "x": 96, "y": 0, "z": 0 }
+    },
+    {
+      "id": "field_laboratory-5",
+      "moduleId": "field_laboratory",
+      "role": "objective",
+      "label": "Полевая лаборатория",
+      "category": "objective",
+      "difficulty": 4,
+      "tags": ["objective", "sample", "anomaly"],
+      "position": { "x": 120, "y": 0, "z": 0 }
+    },
+    {
+      "id": "container_terminal-6",
+      "moduleId": "container_terminal",
+      "role": "return-route",
+      "label": "Контейнерный терминал",
+      "category": "industrial",
+      "difficulty": 2,
+      "tags": ["industrial", "cover", "loot"],
+      "position": { "x": 144, "y": 0, "z": 0 }
+    },
+    {
+      "id": "watchtower-7",
+      "moduleId": "watchtower",
+      "role": "return-route",
+      "label": "Сторожевая вышка",
+      "category": "vertical",
+      "difficulty": 3,
+      "tags": ["vertical", "high-risk", "scouting"],
+      "position": { "x": 168, "y": 0, "z": 0 }
+    },
+    {
+      "id": "extraction_zone-8",
+      "moduleId": "extraction_zone",
+      "role": "extraction",
+      "label": "Эвакуационная зона",
+      "category": "extraction",
+      "difficulty": 3,
+      "tags": ["extraction", "objective", "finale"],
+      "position": { "x": 192, "y": 0, "z": 0 }
+    },
+    {
+      "id": "exposed_yard-9",
+      "moduleId": "exposed_yard",
+      "role": "branch",
+      "label": "Опасное открытое пространство",
+      "category": "danger",
+      "difficulty": 5,
+      "tags": ["danger", "open", "ambush"],
+      "position": { "x": 48, "y": 0, "z": -24 }
+    },
+    {
+      "id": "horror_dark_zone-10",
+      "moduleId": "horror_dark_zone",
+      "role": "danger-branch",
+      "label": "Тесная хоррор-зона",
+      "category": "horror",
+      "difficulty": 5,
+      "tags": ["horror", "watcher", "dark", "optional"],
+      "position": { "x": 72, "y": 0, "z": -24 }
+    }
+  ],
+  "graph": {
+    "startNodeId": "border_checkpoint-0",
+    "objectiveNodeIds": ["field_laboratory-5"],
+    "extractionNodeId": "extraction_zone-8",
+    "branchNodeIds": ["exposed_yard-9", "horror_dark_zone-10"],
+    "nodes": [
+      {
+        "id": "border_checkpoint-0",
+        "moduleId": "border_checkpoint",
+        "role": "start",
+        "position": { "x": 0, "y": 0, "z": 0 },
+        "bounds": { "minX": -7, "maxX": 7, "minZ": -6, "maxZ": 6 }
+      },
+      {
+        "id": "central_courtyard-1",
+        "moduleId": "central_courtyard",
+        "role": "hub",
+        "position": { "x": 24, "y": 0, "z": 0 },
+        "bounds": { "minX": 15, "maxX": 33, "minZ": -8, "maxZ": 8 }
+      },
+      {
+        "id": "warehouse-2",
+        "moduleId": "warehouse",
+        "role": "main-route",
+        "position": { "x": 48, "y": 0, "z": 0 },
+        "bounds": { "minX": 40.5, "maxX": 55.5, "minZ": -6.5, "maxZ": 6.5 }
+      },
+      {
+        "id": "barracks-3",
+        "moduleId": "barracks",
+        "role": "main-route",
+        "position": { "x": 72, "y": 0, "z": 0 },
+        "bounds": { "minX": 65.5, "maxX": 78.5, "minZ": -5.5, "maxZ": 5.5 }
+      },
+      {
+        "id": "repair_hangar-4",
+        "moduleId": "repair_hangar",
+        "role": "main-route",
+        "position": { "x": 96, "y": 0, "z": 0 },
+        "bounds": { "minX": 86, "maxX": 106, "minZ": -7.5, "maxZ": 7.5 }
+      },
+      {
+        "id": "field_laboratory-5",
+        "moduleId": "field_laboratory",
+        "role": "objective",
+        "position": { "x": 120, "y": 0, "z": 0 },
+        "bounds": { "minX": 112, "maxX": 128, "minZ": -7, "maxZ": 7 }
+      },
+      {
+        "id": "container_terminal-6",
+        "moduleId": "container_terminal",
+        "role": "return-route",
+        "position": { "x": 144, "y": 0, "z": 0 },
+        "bounds": { "minX": 136, "maxX": 152, "minZ": -7, "maxZ": 7 }
+      },
+      {
+        "id": "watchtower-7",
+        "moduleId": "watchtower",
+        "role": "return-route",
+        "position": { "x": 168, "y": 0, "z": 0 },
+        "bounds": { "minX": 162, "maxX": 174, "minZ": -6, "maxZ": 6 }
+      },
+      {
+        "id": "extraction_zone-8",
+        "moduleId": "extraction_zone",
+        "role": "extraction",
+        "position": { "x": 192, "y": 0, "z": 0 },
+        "bounds": { "minX": 184, "maxX": 200, "minZ": -7.5, "maxZ": 7.5 }
+      },
+      {
+        "id": "exposed_yard-9",
+        "moduleId": "exposed_yard",
+        "role": "branch",
+        "position": { "x": 48, "y": 0, "z": -24 },
+        "bounds": { "minX": 38, "maxX": 58, "minZ": -33, "maxZ": -15 }
+      },
+      {
+        "id": "horror_dark_zone-10",
+        "moduleId": "horror_dark_zone",
+        "role": "danger-branch",
+        "position": { "x": 72, "y": 0, "z": -24 },
+        "bounds": { "minX": 66, "maxX": 78, "minZ": -29, "maxZ": -19 }
+      }
+    ],
+    "edges": [
+      {
+        "from": "border_checkpoint-0",
+        "to": "central_courtyard-1",
+        "fromConnector": "east",
+        "toConnector": "west"
+      },
+      { "from": "central_courtyard-1", "to": "warehouse-2", "fromConnector": "east", "toConnector": "west" },
+      { "from": "barracks-3", "to": "warehouse-2", "fromConnector": "west", "toConnector": "east" },
+      { "from": "barracks-3", "to": "repair_hangar-4", "fromConnector": "east", "toConnector": "west" },
+      {
+        "from": "field_laboratory-5",
+        "to": "repair_hangar-4",
+        "fromConnector": "west",
+        "toConnector": "east"
+      },
+      {
+        "from": "container_terminal-6",
+        "to": "field_laboratory-5",
+        "fromConnector": "west",
+        "toConnector": "east"
+      },
+      {
+        "from": "container_terminal-6",
+        "to": "watchtower-7",
+        "fromConnector": "east",
+        "toConnector": "west"
+      },
+      { "from": "extraction_zone-8", "to": "watchtower-7", "fromConnector": "west", "toConnector": "east" },
+      { "from": "exposed_yard-9", "to": "warehouse-2", "fromConnector": "west", "toConnector": "north" },
+      {
+        "from": "exposed_yard-9",
+        "to": "horror_dark_zone-10",
+        "fromConnector": "east",
+        "toConnector": "west"
+      },
+      {
+        "from": "horror_dark_zone-10",
+        "to": "repair_hangar-4",
+        "fromConnector": "east",
+        "toConnector": "west"
+      }
+    ]
+  },
+  "navigationMesh": {
+    "agentRadius": 0.35,
+    "clearance": 0.2,
+    "polygonCount": 82,
+    "regionCount": 41,
+    "obstacleCount": 10,
+    "nodeCount": 11,
+    "portalCount": 22,
+    "indexedCellCount": 33
+  },
+  "knownLimitations": [
+    "This structural export does not claim a manual 20–30 minute balance session.",
+    "Dynamic and rotated arbitrary geometry remain outside the authored axis-aligned navmesh profile."
+  ]
+}

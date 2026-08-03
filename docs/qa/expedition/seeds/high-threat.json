@@ -1,0 +1,336 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-03T05:33:19.372Z",
+  "scenario": { "seed": "high-threat", "weapon": "oblomok-7", "watcher": true },
+  "generation": {
+    "seed": "high-threat:world-attempt-0",
+    "attempts": 1,
+    "validation": { "valid": true, "errors": [] }
+  },
+  "summary": {
+    "modules": 12,
+    "mainPathLength": 10,
+    "objectivePathLength": 7,
+    "branchCount": 2,
+    "lootContainers": 17,
+    "enemyGroups": 13,
+    "watcherGroups": 1,
+    "events": 5,
+    "obstacleCount": 6
+  },
+  "objective": {
+    "id": "restore-power",
+    "title": "Восстановить питание",
+    "type": "restore-power",
+    "nodeIds": ["generator_room-6"],
+    "steps": [
+      { "id": "find-fuel", "label": "Найти топливо или предохранитель", "nodeId": "generator_room-6" },
+      { "id": "activate-generator", "label": "Активировать генератор", "nodeId": "generator_room-6" },
+      { "id": "hold-generator", "label": "Выдержать шумовой запуск", "nodeId": "generator_room-6" }
+    ],
+    "currentStep": 0,
+    "completed": false
+  },
+  "extraction": {
+    "primaryNodeId": "extraction_zone-9",
+    "alternativeNodeId": "horror_dark_zone-11",
+    "primaryPath": [
+      "border_checkpoint-0",
+      "central_courtyard-1",
+      "underground_bunker-2",
+      "admin_ruins-3",
+      "repair_hangar-4",
+      "dry_river-5",
+      "generator_room-6",
+      "barracks-7",
+      "watchtower-8",
+      "extraction_zone-9"
+    ],
+    "alternativePath": [
+      "border_checkpoint-0",
+      "central_courtyard-1",
+      "underground_bunker-2",
+      "hidden_cache-10",
+      "horror_dark_zone-11"
+    ]
+  },
+  "events": [
+    { "id": "event-0-0", "type": "blackout-room", "nodeId": "generator_room-6", "optional": true },
+    { "id": "event-0-1", "type": "anomaly-nest", "nodeId": "repair_hangar-4", "optional": true },
+    { "id": "event-0-2", "type": "distress-signal", "nodeId": "admin_ruins-3", "optional": true },
+    { "id": "event-0-3", "type": "blocked-route", "nodeId": "barracks-7", "optional": true },
+    { "id": "event-0-4", "type": "ambush", "nodeId": "generator_room-6", "optional": true }
+  ],
+  "modules": [
+    {
+      "id": "border_checkpoint-0",
+      "moduleId": "border_checkpoint",
+      "role": "start",
+      "label": "Стартовый пограничный блокпост",
+      "category": "start",
+      "difficulty": 1,
+      "tags": ["start", "resource", "safe"],
+      "position": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "id": "central_courtyard-1",
+      "moduleId": "central_courtyard",
+      "role": "hub",
+      "label": "Центральный двор",
+      "category": "hub",
+      "difficulty": 2,
+      "tags": ["hub", "branch", "combat"],
+      "position": { "x": 24, "y": 0, "z": 0 }
+    },
+    {
+      "id": "underground_bunker-2",
+      "moduleId": "underground_bunker",
+      "role": "main-route",
+      "label": "Подземный бункер",
+      "category": "underground",
+      "difficulty": 4,
+      "tags": ["underground", "rare-loot", "dark"],
+      "position": { "x": 48, "y": 0, "z": 0 }
+    },
+    {
+      "id": "admin_ruins-3",
+      "moduleId": "admin_ruins",
+      "role": "main-route",
+      "label": "Разрушенное административное здание",
+      "category": "interior",
+      "difficulty": 3,
+      "tags": ["interior", "story", "cover"],
+      "position": { "x": 72, "y": 0, "z": 0 }
+    },
+    {
+      "id": "repair_hangar-4",
+      "moduleId": "repair_hangar",
+      "role": "main-route",
+      "label": "Ремонтный ангар",
+      "category": "industrial",
+      "difficulty": 3,
+      "tags": ["industrial", "large", "resource"],
+      "position": { "x": 96, "y": 0, "z": 0 }
+    },
+    {
+      "id": "dry_river-5",
+      "moduleId": "dry_river",
+      "role": "main-route",
+      "label": "Высохшее русло",
+      "category": "outdoor",
+      "difficulty": 3,
+      "tags": ["outdoor", "shortcut", "open"],
+      "position": { "x": 120, "y": 0, "z": 0 }
+    },
+    {
+      "id": "generator_room-6",
+      "moduleId": "generator_room",
+      "role": "objective",
+      "label": "Генераторная",
+      "category": "objective",
+      "difficulty": 3,
+      "tags": ["objective", "power", "noise"],
+      "position": { "x": 144, "y": 0, "z": 0 }
+    },
+    {
+      "id": "barracks-7",
+      "moduleId": "barracks",
+      "role": "return-route",
+      "label": "Казарма",
+      "category": "interior",
+      "difficulty": 2,
+      "tags": ["interior", "medical", "close"],
+      "position": { "x": 168, "y": 0, "z": 0 }
+    },
+    {
+      "id": "watchtower-8",
+      "moduleId": "watchtower",
+      "role": "return-route",
+      "label": "Сторожевая вышка",
+      "category": "vertical",
+      "difficulty": 3,
+      "tags": ["vertical", "high-risk", "scouting"],
+      "position": { "x": 192, "y": 0, "z": 0 }
+    },
+    {
+      "id": "extraction_zone-9",
+      "moduleId": "extraction_zone",
+      "role": "extraction",
+      "label": "Эвакуационная зона",
+      "category": "extraction",
+      "difficulty": 3,
+      "tags": ["extraction", "objective", "finale"],
+      "position": { "x": 216, "y": 0, "z": 0 }
+    },
+    {
+      "id": "hidden_cache-10",
+      "moduleId": "hidden_cache",
+      "role": "branch",
+      "label": "Скрытый тайник",
+      "category": "optional",
+      "difficulty": 3,
+      "tags": ["optional", "rare-loot", "dead-end"],
+      "position": { "x": 48, "y": 0, "z": -24 }
+    },
+    {
+      "id": "horror_dark_zone-11",
+      "moduleId": "horror_dark_zone",
+      "role": "danger-branch",
+      "label": "Тесная хоррор-зона",
+      "category": "horror",
+      "difficulty": 5,
+      "tags": ["horror", "watcher", "dark", "optional"],
+      "position": { "x": 72, "y": 0, "z": -24 }
+    }
+  ],
+  "graph": {
+    "startNodeId": "border_checkpoint-0",
+    "objectiveNodeIds": ["generator_room-6"],
+    "extractionNodeId": "extraction_zone-9",
+    "branchNodeIds": ["hidden_cache-10", "horror_dark_zone-11"],
+    "nodes": [
+      {
+        "id": "border_checkpoint-0",
+        "moduleId": "border_checkpoint",
+        "role": "start",
+        "position": { "x": 0, "y": 0, "z": 0 },
+        "bounds": { "minX": -7, "maxX": 7, "minZ": -6, "maxZ": 6 }
+      },
+      {
+        "id": "central_courtyard-1",
+        "moduleId": "central_courtyard",
+        "role": "hub",
+        "position": { "x": 24, "y": 0, "z": 0 },
+        "bounds": { "minX": 15, "maxX": 33, "minZ": -8, "maxZ": 8 }
+      },
+      {
+        "id": "underground_bunker-2",
+        "moduleId": "underground_bunker",
+        "role": "main-route",
+        "position": { "x": 48, "y": 0, "z": 0 },
+        "bounds": { "minX": 41, "maxX": 55, "minZ": -6.5, "maxZ": 6.5 }
+      },
+      {
+        "id": "admin_ruins-3",
+        "moduleId": "admin_ruins",
+        "role": "main-route",
+        "position": { "x": 72, "y": 0, "z": 0 },
+        "bounds": { "minX": 63.5, "maxX": 80.5, "minZ": -6, "maxZ": 6 }
+      },
+      {
+        "id": "repair_hangar-4",
+        "moduleId": "repair_hangar",
+        "role": "main-route",
+        "position": { "x": 96, "y": 0, "z": 0 },
+        "bounds": { "minX": 86, "maxX": 106, "minZ": -7.5, "maxZ": 7.5 }
+      },
+      {
+        "id": "dry_river-5",
+        "moduleId": "dry_river",
+        "role": "main-route",
+        "position": { "x": 120, "y": 0, "z": 0 },
+        "bounds": { "minX": 109, "maxX": 131, "minZ": -6, "maxZ": 6 }
+      },
+      {
+        "id": "generator_room-6",
+        "moduleId": "generator_room",
+        "role": "objective",
+        "position": { "x": 144, "y": 0, "z": 0 },
+        "bounds": { "minX": 136.5, "maxX": 151.5, "minZ": -7, "maxZ": 7 }
+      },
+      {
+        "id": "barracks-7",
+        "moduleId": "barracks",
+        "role": "return-route",
+        "position": { "x": 168, "y": 0, "z": 0 },
+        "bounds": { "minX": 161.5, "maxX": 174.5, "minZ": -5.5, "maxZ": 5.5 }
+      },
+      {
+        "id": "watchtower-8",
+        "moduleId": "watchtower",
+        "role": "return-route",
+        "position": { "x": 192, "y": 0, "z": 0 },
+        "bounds": { "minX": 186, "maxX": 198, "minZ": -6, "maxZ": 6 }
+      },
+      {
+        "id": "extraction_zone-9",
+        "moduleId": "extraction_zone",
+        "role": "extraction",
+        "position": { "x": 216, "y": 0, "z": 0 },
+        "bounds": { "minX": 208, "maxX": 224, "minZ": -7.5, "maxZ": 7.5 }
+      },
+      {
+        "id": "hidden_cache-10",
+        "moduleId": "hidden_cache",
+        "role": "branch",
+        "position": { "x": 48, "y": 0, "z": -24 },
+        "bounds": { "minX": 43, "maxX": 53, "minZ": -28.5, "maxZ": -19.5 }
+      },
+      {
+        "id": "horror_dark_zone-11",
+        "moduleId": "horror_dark_zone",
+        "role": "danger-branch",
+        "position": { "x": 72, "y": 0, "z": -24 },
+        "bounds": { "minX": 66, "maxX": 78, "minZ": -29, "maxZ": -19 }
+      }
+    ],
+    "edges": [
+      {
+        "from": "border_checkpoint-0",
+        "to": "central_courtyard-1",
+        "fromConnector": "east",
+        "toConnector": "west"
+      },
+      {
+        "from": "central_courtyard-1",
+        "to": "underground_bunker-2",
+        "fromConnector": "east",
+        "toConnector": "west"
+      },
+      {
+        "from": "admin_ruins-3",
+        "to": "underground_bunker-2",
+        "fromConnector": "west",
+        "toConnector": "east"
+      },
+      { "from": "admin_ruins-3", "to": "repair_hangar-4", "fromConnector": "east", "toConnector": "west" },
+      { "from": "dry_river-5", "to": "repair_hangar-4", "fromConnector": "west", "toConnector": "east" },
+      { "from": "dry_river-5", "to": "generator_room-6", "fromConnector": "east", "toConnector": "west" },
+      { "from": "barracks-7", "to": "generator_room-6", "fromConnector": "west", "toConnector": "east" },
+      { "from": "barracks-7", "to": "watchtower-8", "fromConnector": "east", "toConnector": "west" },
+      { "from": "extraction_zone-9", "to": "watchtower-8", "fromConnector": "west", "toConnector": "east" },
+      {
+        "from": "hidden_cache-10",
+        "to": "underground_bunker-2",
+        "fromConnector": "south",
+        "toConnector": "north"
+      },
+      {
+        "from": "hidden_cache-10",
+        "to": "horror_dark_zone-11",
+        "fromConnector": "south",
+        "toConnector": "west"
+      },
+      {
+        "from": "horror_dark_zone-11",
+        "to": "repair_hangar-4",
+        "fromConnector": "east",
+        "toConnector": "west"
+      }
+    ]
+  },
+  "navigationMesh": {
+    "agentRadius": 0.35,
+    "clearance": 0.2,
+    "polygonCount": 60,
+    "regionCount": 30,
+    "obstacleCount": 6,
+    "nodeCount": 12,
+    "portalCount": 24,
+    "indexedCellCount": 33
+  },
+  "knownLimitations": [
+    "This structural export does not claim a manual 20–30 minute balance session.",
+    "Dynamic and rotated arbitrary geometry remain outside the authored axis-aligned navmesh profile."
+  ]
+}

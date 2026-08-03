@@ -1,0 +1,307 @@
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-08-03T05:33:19.350Z",
+  "scenario": { "seed": "watcher", "weapon": "rifle", "watcher": true },
+  "generation": {
+    "seed": "watcher:world-attempt-0",
+    "attempts": 1,
+    "validation": { "valid": true, "errors": [] }
+  },
+  "summary": {
+    "modules": 11,
+    "mainPathLength": 9,
+    "objectivePathLength": 6,
+    "branchCount": 2,
+    "lootContainers": 13,
+    "enemyGroups": 14,
+    "watcherGroups": 1,
+    "events": 6,
+    "obstacleCount": 5
+  },
+  "objective": {
+    "id": "activate-relays",
+    "title": "Активировать ретрансляторы",
+    "type": "activate-relays",
+    "nodeIds": ["central_courtyard-1", "technical_corridor-2", "technical_corridor-5"],
+    "steps": [
+      { "id": "relay-1", "label": "Активировать ретранслятор 1", "nodeId": "central_courtyard-1" },
+      { "id": "relay-2", "label": "Активировать ретранслятор 2", "nodeId": "technical_corridor-2" },
+      { "id": "relay-3", "label": "Активировать ретранслятор 3", "nodeId": "technical_corridor-5" }
+    ],
+    "currentStep": 0,
+    "completed": false
+  },
+  "extraction": {
+    "primaryNodeId": "extraction_zone-8",
+    "alternativeNodeId": "exposed_yard-9",
+    "primaryPath": [
+      "border_checkpoint-0",
+      "central_courtyard-1",
+      "technical_corridor-2",
+      "admin_ruins-3",
+      "barracks-4",
+      "technical_corridor-5",
+      "dry_river-6",
+      "watchtower-7",
+      "extraction_zone-8"
+    ],
+    "alternativePath": [
+      "border_checkpoint-0",
+      "central_courtyard-1",
+      "technical_corridor-2",
+      "exposed_yard-9"
+    ]
+  },
+  "events": [
+    { "id": "event-0-0", "type": "ambush", "nodeId": "hidden_cache-10", "optional": true },
+    { "id": "event-0-1", "type": "rare-cache", "nodeId": "watchtower-7", "optional": true },
+    { "id": "event-0-2", "type": "anomaly-nest", "nodeId": "watchtower-7", "optional": true },
+    { "id": "event-0-3", "type": "wounded-scout", "nodeId": "watchtower-7", "optional": true },
+    { "id": "event-0-4", "type": "armory", "nodeId": "technical_corridor-5", "optional": true },
+    { "id": "event-0-5", "type": "blackout-room", "nodeId": "technical_corridor-2", "optional": true }
+  ],
+  "modules": [
+    {
+      "id": "border_checkpoint-0",
+      "moduleId": "border_checkpoint",
+      "role": "start",
+      "label": "Стартовый пограничный блокпост",
+      "category": "start",
+      "difficulty": 1,
+      "tags": ["start", "resource", "safe"],
+      "position": { "x": 0, "y": 0, "z": 0 }
+    },
+    {
+      "id": "central_courtyard-1",
+      "moduleId": "central_courtyard",
+      "role": "hub",
+      "label": "Центральный двор",
+      "category": "hub",
+      "difficulty": 2,
+      "tags": ["hub", "branch", "combat"],
+      "position": { "x": 24, "y": 0, "z": 0 }
+    },
+    {
+      "id": "technical_corridor-2",
+      "moduleId": "technical_corridor",
+      "role": "main-route",
+      "label": "Технический коридор",
+      "category": "technical",
+      "difficulty": 2,
+      "tags": ["technical", "shortcut", "relay-capable"],
+      "position": { "x": 48, "y": 0, "z": 0 }
+    },
+    {
+      "id": "admin_ruins-3",
+      "moduleId": "admin_ruins",
+      "role": "main-route",
+      "label": "Разрушенное административное здание",
+      "category": "interior",
+      "difficulty": 3,
+      "tags": ["interior", "story", "cover"],
+      "position": { "x": 72, "y": 0, "z": 0 }
+    },
+    {
+      "id": "barracks-4",
+      "moduleId": "barracks",
+      "role": "main-route",
+      "label": "Казарма",
+      "category": "interior",
+      "difficulty": 2,
+      "tags": ["interior", "medical", "close"],
+      "position": { "x": 96, "y": 0, "z": 0 }
+    },
+    {
+      "id": "technical_corridor-5",
+      "moduleId": "technical_corridor",
+      "role": "objective",
+      "label": "Технический коридор",
+      "category": "technical",
+      "difficulty": 2,
+      "tags": ["technical", "shortcut", "relay-capable"],
+      "position": { "x": 120, "y": 0, "z": 0 }
+    },
+    {
+      "id": "dry_river-6",
+      "moduleId": "dry_river",
+      "role": "return-route",
+      "label": "Высохшее русло",
+      "category": "outdoor",
+      "difficulty": 3,
+      "tags": ["outdoor", "shortcut", "open"],
+      "position": { "x": 144, "y": 0, "z": 0 }
+    },
+    {
+      "id": "watchtower-7",
+      "moduleId": "watchtower",
+      "role": "return-route",
+      "label": "Сторожевая вышка",
+      "category": "vertical",
+      "difficulty": 3,
+      "tags": ["vertical", "high-risk", "scouting"],
+      "position": { "x": 168, "y": 0, "z": 0 }
+    },
+    {
+      "id": "extraction_zone-8",
+      "moduleId": "extraction_zone",
+      "role": "extraction",
+      "label": "Эвакуационная зона",
+      "category": "extraction",
+      "difficulty": 3,
+      "tags": ["extraction", "objective", "finale"],
+      "position": { "x": 192, "y": 0, "z": 0 }
+    },
+    {
+      "id": "exposed_yard-9",
+      "moduleId": "exposed_yard",
+      "role": "branch",
+      "label": "Опасное открытое пространство",
+      "category": "danger",
+      "difficulty": 5,
+      "tags": ["danger", "open", "ambush"],
+      "position": { "x": 48, "y": 0, "z": -24 }
+    },
+    {
+      "id": "hidden_cache-10",
+      "moduleId": "hidden_cache",
+      "role": "reward-branch",
+      "label": "Скрытый тайник",
+      "category": "optional",
+      "difficulty": 3,
+      "tags": ["optional", "rare-loot", "dead-end"],
+      "position": { "x": 72, "y": 0, "z": -24 }
+    }
+  ],
+  "graph": {
+    "startNodeId": "border_checkpoint-0",
+    "objectiveNodeIds": ["technical_corridor-5"],
+    "extractionNodeId": "extraction_zone-8",
+    "branchNodeIds": ["exposed_yard-9", "hidden_cache-10"],
+    "nodes": [
+      {
+        "id": "border_checkpoint-0",
+        "moduleId": "border_checkpoint",
+        "role": "start",
+        "position": { "x": 0, "y": 0, "z": 0 },
+        "bounds": { "minX": -7, "maxX": 7, "minZ": -6, "maxZ": 6 }
+      },
+      {
+        "id": "central_courtyard-1",
+        "moduleId": "central_courtyard",
+        "role": "hub",
+        "position": { "x": 24, "y": 0, "z": 0 },
+        "bounds": { "minX": 15, "maxX": 33, "minZ": -8, "maxZ": 8 }
+      },
+      {
+        "id": "technical_corridor-2",
+        "moduleId": "technical_corridor",
+        "role": "main-route",
+        "position": { "x": 48, "y": 0, "z": 0 },
+        "bounds": { "minX": 42.5, "maxX": 53.5, "minZ": -4, "maxZ": 4 }
+      },
+      {
+        "id": "admin_ruins-3",
+        "moduleId": "admin_ruins",
+        "role": "main-route",
+        "position": { "x": 72, "y": 0, "z": 0 },
+        "bounds": { "minX": 63.5, "maxX": 80.5, "minZ": -6, "maxZ": 6 }
+      },
+      {
+        "id": "barracks-4",
+        "moduleId": "barracks",
+        "role": "main-route",
+        "position": { "x": 96, "y": 0, "z": 0 },
+        "bounds": { "minX": 89.5, "maxX": 102.5, "minZ": -5.5, "maxZ": 5.5 }
+      },
+      {
+        "id": "technical_corridor-5",
+        "moduleId": "technical_corridor",
+        "role": "objective",
+        "position": { "x": 120, "y": 0, "z": 0 },
+        "bounds": { "minX": 114.5, "maxX": 125.5, "minZ": -4, "maxZ": 4 }
+      },
+      {
+        "id": "dry_river-6",
+        "moduleId": "dry_river",
+        "role": "return-route",
+        "position": { "x": 144, "y": 0, "z": 0 },
+        "bounds": { "minX": 133, "maxX": 155, "minZ": -6, "maxZ": 6 }
+      },
+      {
+        "id": "watchtower-7",
+        "moduleId": "watchtower",
+        "role": "return-route",
+        "position": { "x": 168, "y": 0, "z": 0 },
+        "bounds": { "minX": 162, "maxX": 174, "minZ": -6, "maxZ": 6 }
+      },
+      {
+        "id": "extraction_zone-8",
+        "moduleId": "extraction_zone",
+        "role": "extraction",
+        "position": { "x": 192, "y": 0, "z": 0 },
+        "bounds": { "minX": 184, "maxX": 200, "minZ": -7.5, "maxZ": 7.5 }
+      },
+      {
+        "id": "exposed_yard-9",
+        "moduleId": "exposed_yard",
+        "role": "branch",
+        "position": { "x": 48, "y": 0, "z": -24 },
+        "bounds": { "minX": 38, "maxX": 58, "minZ": -33, "maxZ": -15 }
+      },
+      {
+        "id": "hidden_cache-10",
+        "moduleId": "hidden_cache",
+        "role": "reward-branch",
+        "position": { "x": 72, "y": 0, "z": -24 },
+        "bounds": { "minX": 67, "maxX": 77, "minZ": -28.5, "maxZ": -19.5 }
+      }
+    ],
+    "edges": [
+      {
+        "from": "border_checkpoint-0",
+        "to": "central_courtyard-1",
+        "fromConnector": "east",
+        "toConnector": "west"
+      },
+      {
+        "from": "central_courtyard-1",
+        "to": "technical_corridor-2",
+        "fromConnector": "east",
+        "toConnector": "west"
+      },
+      {
+        "from": "admin_ruins-3",
+        "to": "technical_corridor-2",
+        "fromConnector": "west",
+        "toConnector": "east"
+      },
+      { "from": "admin_ruins-3", "to": "barracks-4", "fromConnector": "east", "toConnector": "west" },
+      { "from": "barracks-4", "to": "technical_corridor-5", "fromConnector": "east", "toConnector": "west" },
+      { "from": "barracks-4", "to": "hidden_cache-10", "fromConnector": "west", "toConnector": "south" },
+      { "from": "dry_river-6", "to": "technical_corridor-5", "fromConnector": "west", "toConnector": "east" },
+      { "from": "dry_river-6", "to": "watchtower-7", "fromConnector": "east", "toConnector": "west" },
+      { "from": "extraction_zone-8", "to": "watchtower-7", "fromConnector": "west", "toConnector": "east" },
+      {
+        "from": "exposed_yard-9",
+        "to": "technical_corridor-2",
+        "fromConnector": "west",
+        "toConnector": "north"
+      },
+      { "from": "exposed_yard-9", "to": "hidden_cache-10", "fromConnector": "east", "toConnector": "south" }
+    ]
+  },
+  "navigationMesh": {
+    "agentRadius": 0.35,
+    "clearance": 0.2,
+    "polygonCount": 52,
+    "regionCount": 26,
+    "obstacleCount": 5,
+    "nodeCount": 11,
+    "portalCount": 22,
+    "indexedCellCount": 33
+  },
+  "knownLimitations": [
+    "This structural export does not claim a manual 20–30 minute balance session.",
+    "Dynamic and rotated arbitrary geometry remain outside the authored axis-aligned navmesh profile."
+  ]
+}

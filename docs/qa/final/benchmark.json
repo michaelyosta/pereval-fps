@@ -1,19 +1,19 @@
 {
-  "generatedAt": "2026-08-02T18:47:03.280Z",
-  "url": "http://127.0.0.1:4174/?mode=arena&demo=1&debug=1",
-  "firstLoadMs": 679.36,
+  "generatedAt": "2026-08-03T05:27:09.831Z",
+  "url": "http://127.0.0.1:4174/?mode=expedition&seed=benchmark&watcher=1&debug=1",
+  "firstLoadMs": 683.6,
   "pageErrors": [],
   "consoleErrors": [],
-  "elapsedMs": 1869.8,
-  "fps": 2.67,
-  "frameTimeMs": 373.96,
+  "elapsedMs": 1650.1,
+  "fps": 4.24,
+  "frameTimeMs": 235.73,
   "renderer": {
-    "calls": 770,
-    "triangles": 10783,
+    "calls": 254,
+    "triangles": 3533,
     "points": 816,
-    "lines": 0,
+    "lines": 36,
     "memory": {
-      "geometries": 333,
+      "geometries": 314,
       "textures": 41
     }
   },
@@ -28,20 +28,20 @@
     "hits": 0,
     "headshots": 0,
     "damageTaken": 0,
-    "ammo": 30,
+    "ammo": 8,
     "reserve": 120,
-    "magSize": 30,
+    "magSize": 8,
     "weaponName": "ОБЛОМОК-7",
     "reloading": false,
-    "time": 0.35,
+    "time": 0.5499999999999999,
     "paused": false,
     "player": {
       "x": 0,
       "y": 1.62,
-      "z": 14
+      "z": 3
     },
-    "pointerLocked": false
+    "pointerLocked": true
   },
   "resourceCount": 51,
-  "encodedBytes": 3690894
+  "encodedBytes": 3695993
 }

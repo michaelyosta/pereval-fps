@@ -312,6 +312,31 @@ export class WorldGenerator {
         position: instance.worldPoint(point),
       })),
     );
+    if (config.watcher && !enemyGroups.some((group) => group.archetype === 'watcher')) {
+      const watcherHost = [...instances]
+        .filter(({ instance }) => !['border_checkpoint', 'central_courtyard'].includes(instance.moduleId))
+        .sort((left, right) => {
+          const leftScore =
+            Number(left.instance.definition.tags.includes('horror')) * 3 +
+            Number(left.instance.definition.tags.includes('danger')) * 2 +
+            Number(left.instance.definition.tags.includes('optional'));
+          const rightScore =
+            Number(right.instance.definition.tags.includes('horror')) * 3 +
+            Number(right.instance.definition.tags.includes('danger')) * 2 +
+            Number(right.instance.definition.tags.includes('optional'));
+          return rightScore - leftScore || left.instance.id.localeCompare(right.instance.id);
+        })[0];
+      const watcherPoint = watcherHost?.instance.definition.enemyPoints[0] ?? { x: 0, y: 0, z: 0 };
+      if (watcherHost) {
+        enemyGroups.push({
+          id: `enemy-group-${watcherHost.instance.id}-watcher`,
+          nodeId: watcherHost.instance.id,
+          archetype: 'watcher',
+          count: 1,
+          position: watcherHost.instance.worldPoint(watcherPoint),
+        });
+      }
+    }
     const eventCount = random.int(5, 7);
     const events = random
       .shuffle(EVENT_TYPES)

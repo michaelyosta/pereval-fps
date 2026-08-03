@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = 4174;
-const url = `http://127.0.0.1:${port}/?mode=arena&demo=1&debug=1`;
+const url = `http://127.0.0.1:${port}/?mode=expedition&seed=benchmark&watcher=1&debug=1`;
 const command = process.platform === 'win32' ? 'npm.cmd' : 'npm';
 const server = spawn(command, ['run', 'dev', '--', '--host', '127.0.0.1', '--port', String(port)], {
   cwd: root,
@@ -42,6 +42,10 @@ try {
   const navigationStart = performance.now();
   await page.goto(url, { waitUntil: 'networkidle' });
   const firstLoadMs = performance.now() - navigationStart;
+  await page.locator('#title').click();
+  await page.locator('#hideout-loadout').click();
+  await page.locator('#loadout-deploy').dispatchEvent('click');
+  await page.waitForFunction(() => window.__PEREVAL_DEBUG__?.getRunState?.().state === 'Exploration');
   await page.waitForTimeout(500);
   const metrics = await page.evaluate(async () => {
     const start = window.performance.now();
@@ -79,7 +83,7 @@ try {
     ...metrics,
   };
   await writeFile(path.join(outputDir, 'benchmark.json'), `${JSON.stringify(report, null, 2)}\n`, 'utf8');
-  await page.screenshot({ path: path.join(outputDir, 'demo.png') });
+  await page.screenshot({ path: path.join(outputDir, 'expedition-benchmark.png') });
   await browser.close();
   console.log(JSON.stringify(report, null, 2));
 } finally {
