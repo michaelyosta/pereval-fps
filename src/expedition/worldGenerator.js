@@ -45,6 +45,14 @@ const TEMPORARY_SKILLS = [
   'last-stand',
 ];
 
+function monotonicNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function elapsedMs(start) {
+  return Number(Math.max(0, monotonicNow() - start).toFixed(2));
+}
+
 function itemForLoot(random, instance, point, objectiveType, index) {
   if (point.role === 'fuel') return { itemId: 'fuel', amount: 1 };
   if (point.role === 'fuse') return { itemId: 'fuse', amount: 1 };
@@ -177,6 +185,7 @@ export class WorldGenerator {
     const config = input instanceof RunConfig ? input : new RunConfig(input);
     const rootContext = new GenerationContext(RunSeed.from(config.seed));
     const maxAttempts = Math.min(config.maxGenerationAttempts, this.maxAttempts);
+    const generationStart = monotonicNow();
     this.lastAttempts = [];
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       const world = this.buildAttempt(rootContext.fork(`world-attempt-${attempt}`), config, attempt);
@@ -185,6 +194,13 @@ export class WorldGenerator {
       if (validation.valid) {
         world.validation = validation;
         world.generationAttempts = attempt + 1;
+        world.metadata = {
+          ...world.metadata,
+          timings: {
+            ...(world.metadata?.timings ?? {}),
+            worldGenerationMs: elapsedMs(generationStart),
+          },
+        };
         return world;
       }
     }
@@ -356,7 +372,9 @@ export class WorldGenerator {
       graph.branchNodeIds.find((id) => graph.getNode(id).definition.tags.includes('danger')) ??
       graph.branchNodeIds.at(-1);
     const planner = new ConnectorAwarePlanner(graph);
+    const navCollisionStart = monotonicNow();
     const navigationMesh = new ExpeditionNavMesh(graph);
+    const navCollisionBuildMs = elapsedMs(navCollisionStart);
     const navigation = {
       main: planner.plan(start.id, extraction.id),
       objective: planner.plan(start.id, objective.id),
@@ -385,6 +403,7 @@ export class WorldGenerator {
         difficulty: config.difficulty,
         watcher: config.watcher,
         routeLength: graph.shortestPath(start.id, extraction.id).length,
+        timings: { navCollisionBuildMs },
       },
     });
   }

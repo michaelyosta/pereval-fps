@@ -1,20 +1,20 @@
 {
-  "generatedAt": "2026-08-03T05:27:09.831Z",
+  "generatedAt": "2026-08-03T05:53:25.559Z",
   "url": "http://127.0.0.1:4174/?mode=expedition&seed=benchmark&watcher=1&debug=1",
-  "firstLoadMs": 683.6,
+  "firstLoadMs": 704.75,
   "pageErrors": [],
   "consoleErrors": [],
-  "elapsedMs": 1650.1,
-  "fps": 4.24,
-  "frameTimeMs": 235.73,
+  "elapsedMs": 1663,
+  "fps": 4.21,
+  "frameTimeMs": 237.57,
   "renderer": {
-    "calls": 254,
-    "triangles": 3533,
+    "calls": 246,
+    "triangles": 3517,
     "points": 816,
     "lines": 36,
     "memory": {
-      "geometries": 314,
-      "textures": 41
+      "geometries": 306,
+      "textures": 39
     }
   },
   "state": {
@@ -42,6 +42,14 @@
     },
     "pointerLocked": true
   },
+  "runPerformance": {
+    "navCollisionBuildMs": 2.1,
+    "worldGenerationMs": 5.6,
+    "runResetMs": 6.7,
+    "colliderBuildMs": 0.2,
+    "moduleAssemblyMs": 3.3,
+    "worldAssemblyMs": 6
+  },
   "resourceCount": 51,
-  "encodedBytes": 3695993
+  "encodedBytes": 3706026
 }

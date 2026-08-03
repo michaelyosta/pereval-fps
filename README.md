@@ -93,9 +93,9 @@ npm run qa:seeds         # exports eight deterministic seed graph schemas
 npm run benchmark        # writes docs/qa/final/benchmark.json and expedition-benchmark.png
 ```
 
-The benchmark reports actual values from the current machine. The checked-in run uses the seeded expedition runtime (`seed=benchmark`, normal mode) in headless Chromium without assuming a discrete GPU: 4.24 FPS, 235.73 ms sampled frame time, 254 draw calls, 3,533 triangles, 51 resources, 3.70 MB encoded resource bytes, 314 geometries, and 41 textures. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
+The benchmark reports actual values from the current machine. The checked-in run uses the seeded expedition runtime (`seed=benchmark`, normal mode) in headless Chromium without assuming a discrete GPU: 4.21 FPS, 237.57 ms sampled frame time, 246 draw calls, 3,517 triangles, 51 resources, 3.71 MB encoded resource bytes, 306 geometries, and 39 textures. The run telemetry also records 5.60 ms world generation, 2.10 ms nav/collision build, 6.70 ms reset, 0.20 ms collider build, 3.30 ms module assembly, and 6.00 ms total world assembly. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
 
-The build currently emits one main JavaScript chunk of about 716.25 kB minified and 194.34 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
+The build currently emits one main JavaScript chunk of about 717.55 kB minified and 194.79 kB gzip. This is a known optimization target, not hidden behind a made-up budget.
 
 `npm audit --omit=dev --audit-level=high` is clean. The full development-tool audit currently reports five transitive Vite/Vitest/esbuild advisories; the available `npm audit fix --force` is a breaking upgrade, so it is intentionally not applied in this gameplay pass.
 

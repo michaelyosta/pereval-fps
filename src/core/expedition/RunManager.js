@@ -13,6 +13,14 @@ import { WatcherDirector } from '../../expedition/watcher.js';
 import { EventDirector } from '../../expedition/events.js';
 import { EncounterDirector } from '../../expedition/encounters.js';
 
+function monotonicNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function elapsedMs(start) {
+  return Number(Math.max(0, monotonicNow() - start).toFixed(2));
+}
+
 export class RunManager {
   constructor({ generator = new WorldGenerator(), campaign = null, saveSystem = null } = {}) {
     this.generator = generator;
@@ -32,6 +40,7 @@ export class RunManager {
     this.encounterDirector = null;
     this.noiseSequence = 0;
     this.lastNoiseId = null;
+    this.performance = {};
     this.campaign = campaign
       ? campaign instanceof CampaignState
         ? campaign
@@ -82,6 +91,7 @@ export class RunManager {
       throw new Error(`Cannot begin a run from ${this.state}`);
     }
     const config = options instanceof RunConfig ? options : new RunConfig(options);
+    const runResetStart = monotonicNow();
     this.run?.map?.dispose?.();
     this.transition(RunState.GeneratingRun, 'generate-run');
     try {
@@ -159,6 +169,11 @@ export class RunManager {
       if (!this.run.inventory.has(ammoItemId))
         this.run.inventory.add(this.itemRegistry.get(ammoItemId).toInventoryItem(10));
       this.run.weapon.reserve = this.run.inventory.count(ammoItemId);
+      this.performance = {
+        ...(generatedWorld.metadata?.timings ?? {}),
+        runResetMs: elapsedMs(runResetStart),
+      };
+      this.run.performance = { ...this.performance };
       this.emit({
         type: 'run-generated',
         seed: config.seed.display,
@@ -179,6 +194,12 @@ export class RunManager {
     this.transition(RunState.Exploration, 'player-deployed');
     this.emit({ type: 'run-started', seed: this.run.config.seed.display });
     return this.run;
+  }
+
+  recordPerformance(timings = {}) {
+    this.performance = { ...this.performance, ...timings };
+    if (this.run) this.run.performance = { ...this.performance };
+    return { ...this.performance };
   }
 
   restart(reason = 'restart') {
@@ -660,6 +681,7 @@ export class RunManager {
                 }
               : null,
             elapsedSeconds: this.run.elapsedSeconds,
+            performance: { ...this.run.performance },
             threat: this.run.threat,
             threatDirector: this.threatDirector?.snapshot?.() ?? null,
             anomaly: this.run.anomaly,

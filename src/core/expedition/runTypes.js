@@ -141,6 +141,7 @@ export class ActiveRun {
     this.skillChoiceOpen = false;
     this.permanentRewards = [];
     this.visitedModules = [];
+    this.performance = {};
     this.loadout = { primaryWeapon: config.primaryWeapon };
     this.equipment = null;
     this.weapon = null;

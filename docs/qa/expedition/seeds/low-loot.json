@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T05:33:19.384Z",
+  "generatedAt": "2026-08-03T05:53:11.816Z",
   "scenario": { "seed": "low-loot", "weapon": "pistol", "watcher": false },
   "generation": {
     "seed": "low-loot:world-attempt-0",
     "attempts": 1,
-    "validation": { "valid": true, "errors": [] }
+    "validation": { "valid": true, "errors": [] },
+    "timings": { "navCollisionBuildMs": 0.27, "worldGenerationMs": 0.94 }
   },
   "summary": {
     "modules": 11,

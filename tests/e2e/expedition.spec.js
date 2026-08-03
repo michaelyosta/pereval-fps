@@ -34,6 +34,16 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
   expect(navigationMesh?.nodeCount).toBe(snapshot?.run?.map?.modules?.length);
   expect(navigationMesh?.polygonCount).toBe(navigationMesh?.regionCount * 2);
   expect(navigationMesh?.obstacleCount).toBeGreaterThan(0);
+  const performance = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getPerformanceState?.());
+  expect(performance).toEqual(
+    expect.objectContaining({
+      worldGenerationMs: expect.any(Number),
+      navCollisionBuildMs: expect.any(Number),
+      colliderBuildMs: expect.any(Number),
+      moduleAssemblyMs: expect.any(Number),
+      runResetMs: expect.any(Number),
+    }),
+  );
   expect(await page.locator('#debug-run-state').textContent()).toBe('Exploration');
   const objective = await page.evaluate(() => window.__PEREVAL_DEBUG__?.completeObjective?.());
   expect(objective?.completed).toBe(true);

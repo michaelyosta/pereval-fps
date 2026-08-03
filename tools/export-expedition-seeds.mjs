@@ -52,6 +52,7 @@ for (const scenario of scenarios) {
       seed: world.generationSeed,
       attempts: world.generationAttempts,
       validation: world.validation,
+      timings: world.metadata?.timings ?? {},
     },
     summary: {
       modules: modules.length,

@@ -104,6 +104,10 @@ describe('seeded expedition generation', () => {
       nodeCount: first.graph.nodes.size,
       obstacleCount: expect.any(Number),
     });
+    expect(first.metadata.timings).toMatchObject({
+      worldGenerationMs: expect.any(Number),
+      navCollisionBuildMs: expect.any(Number),
+    });
     const meshSnapshot = first.navigationMesh.snapshot();
     expect(meshSnapshot.polygonCount).toBe(meshSnapshot.regionCount * 2);
     expect(meshSnapshot.obstacleCount).toBeGreaterThan(0);
@@ -154,6 +158,11 @@ describe('seeded expedition generation', () => {
     expect(result.colliders.length).toBeGreaterThan(world.modules.length);
     expect(result.colliders.every((collider) => collider.height > 0)).toBe(true);
     expect(result.colliders.some((collider) => collider.tag.includes('burned-vehicle'))).toBe(true);
+    expect(result.timings).toMatchObject({
+      colliderBuildMs: expect.any(Number),
+      moduleAssemblyMs: expect.any(Number),
+      worldAssemblyMs: expect.any(Number),
+    });
     expect(result.group.children.some((child) => child.userData.shootable)).toBe(true);
     expect(scene.getObjectByName('expeditionWorld')).toBeTruthy();
     assembler.dispose();

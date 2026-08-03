@@ -183,6 +183,7 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
       },
     }),
     getNavigationMeshState: () => g.expedition?.run?.map?.navigationMesh?.snapshot?.() ?? null,
+    getPerformanceState: () => ({ ...(g.expedition?.run?.performance ?? {}) }),
     getRunState: () => g.expedition?.snapshot?.() ?? null,
     getEncounterState: () => g.expedition?.encounterDirector?.snapshot?.() ?? null,
     getBotState: () => mods.bots?.getBots?.().map((bot) => ({
@@ -587,6 +588,7 @@ function mountExpeditionWorld(run) {
   if (!g.expeditionAssembler || !run?.map) return;
   if (g.staticGroup) g.staticGroup.visible = false;
   g.expeditionScene = g.expeditionAssembler.assemble(run.map);
+  g.expedition.recordPerformance(g.expeditionScene.timings);
   registerExpeditionInteractions(run, g.expeditionScene);
   const startNode = run.map.graph.getNode(run.map.graph.startNodeId);
   if (startNode) {

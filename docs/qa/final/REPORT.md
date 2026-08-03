@@ -20,13 +20,14 @@ Branch: `codex/procedural-expedition`
 
 The checked-in benchmark is from `?mode=expedition&seed=benchmark&watcher=1&debug=1` at 1280×720 in headless Chromium on the local machine. It recorded:
 
-- first load: 683.60 ms
-- sample: 1,650.10 ms, 4.24 FPS, 235.73 ms sampled frame time
-- renderer: 254 calls, 3,533 triangles, 816 points, 36 lines
-- resources: 51 entries, 3,695,993 encoded bytes, 314 geometries, 41 textures
+- first load: 704.75 ms
+- sample: 1,663.00 ms, 4.21 FPS, 237.57 ms sampled frame time
+- renderer: 246 calls, 3,517 triangles, 816 points, 36 lines
+- resources: 51 entries, 3,706,026 encoded bytes, 306 geometries, 39 textures
+- run timings: 5.60 ms generation, 2.10 ms nav/collision, 6.70 ms reset, 0.20 ms collider build, 3.30 ms module assembly, 6.00 ms world assembly
 - page errors: none; console errors: none
 
-The production bundle measured in the same pass is `716.25 kB` minified / `194.34 kB` gzip. The benchmark artifact is [benchmark.json](benchmark.json), with the matching expedition capture at [expedition-benchmark.png](expedition-benchmark.png).
+The production bundle measured in the same pass is `717.55 kB` minified / `194.79 kB` gzip. The benchmark artifact is [benchmark.json](benchmark.json), with the matching expedition capture at [expedition-benchmark.png](expedition-benchmark.png).
 
 The in-app browser visual check showed approximately 60 FPS and 16.7 ms frame time under a different browser/GPU path. These measurements are reported separately and are not extrapolated into a universal hardware claim.
 

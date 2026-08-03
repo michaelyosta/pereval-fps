@@ -1,6 +1,14 @@
 import * as THREE from 'three';
 import { getEventDefinition } from './events.js';
 
+function monotonicNow() {
+  return globalThis.performance?.now?.() ?? Date.now();
+}
+
+function elapsedMs(start) {
+  return Number(Math.max(0, monotonicNow() - start).toFixed(2));
+}
+
 const CATEGORY_COLORS = {
   start: 0x6b8d9d,
   hub: 0x927b5c,
@@ -65,6 +73,7 @@ function createWallSegments(instance, openSides) {
   const segments = [];
   const addHorizontal = (side, z, length, x) => {
     segments.push({
+      kind: 'wall',
       x,
       z,
       hw: length / 2,
@@ -76,6 +85,7 @@ function createWallSegments(instance, openSides) {
   };
   const addVertical = (side, x, length, z) => {
     segments.push({
+      kind: 'wall',
       x,
       z,
       hw: thickness,
@@ -151,14 +161,35 @@ export class ThreeWorldAssembler {
   }
 
   assemble(generatedWorld) {
+    const assemblyStart = monotonicNow();
     this.dispose();
     const group = new THREE.Group();
     group.name = 'expeditionWorld';
     const openSides = collectOpenSides(generatedWorld.graph);
     const colliders = [];
     const interactables = [];
+    const collisionBuildStart = monotonicNow();
+    const collidersByModule = new Map();
+    for (const { instance } of generatedWorld.modules) {
+      const moduleColliders = [...createWallSegments(instance, openSides.get(instance.id) ?? new Set())];
+      for (const obstacleData of instance.definition.obstacles ?? []) {
+        moduleColliders.push({
+          kind: 'obstacle',
+          ...obstacleData,
+          x: instance.position.x + obstacleData.x,
+          z: instance.position.z + obstacleData.z,
+          height: obstacleData.height ?? 2.2,
+          rotation: obstacleData.rotation ?? 0,
+          tag: instance.moduleId + ':' + (obstacleData.tag ?? 'obstacle'),
+        });
+      }
+      collidersByModule.set(instance.id, moduleColliders);
+      colliders.push(...moduleColliders);
+    }
+    const colliderBuildMs = elapsedMs(collisionBuildStart);
     const floorMaterial = new THREE.MeshStandardMaterial({ color: 0x5d5447, roughness: 0.95, metalness: 0 });
     this.materials.push(floorMaterial);
+    const moduleAssemblyStart = monotonicNow();
     for (const { instance, role } of generatedWorld.modules) {
       const color = CATEGORY_COLORS[instance.definition.category] ?? 0x777777;
       const material = new THREE.MeshStandardMaterial({ color, roughness: 0.88, metalness: 0.08 });
@@ -183,40 +214,17 @@ export class ThreeWorldAssembler {
       frame.userData.moduleId = instance.moduleId;
       group.add(frame);
 
-      for (const wallData of createWallSegments(instance, openSides.get(instance.id) ?? new Set())) {
+      for (const collider of collidersByModule.get(instance.id) ?? []) {
         const wall = new THREE.Mesh(
-          new THREE.BoxGeometry(wallData.hw * 2, wallData.height, wallData.hd * 2),
-          material,
-        );
-        wall.position.set(wallData.x, wallData.height / 2, wallData.z);
-        wall.rotation.y = wallData.rotation;
-        wall.userData.moduleId = instance.moduleId;
-        wall.userData.shootable = true;
-        wall.userData.collider = wallData;
-        group.add(wall);
-        colliders.push(wallData);
-      }
-
-      for (const obstacleData of instance.definition.obstacles ?? []) {
-        const collider = {
-          ...obstacleData,
-          x: instance.position.x + obstacleData.x,
-          z: instance.position.z + obstacleData.z,
-          height: obstacleData.height ?? 2.2,
-          rotation: obstacleData.rotation ?? 0,
-          tag: instance.moduleId + ':' + (obstacleData.tag ?? 'obstacle'),
-        };
-        const obstacle = new THREE.Mesh(
           new THREE.BoxGeometry(collider.hw * 2, collider.height, collider.hd * 2),
           material,
         );
-        obstacle.position.set(collider.x, collider.height / 2, collider.z);
-        obstacle.rotation.y = collider.rotation;
-        obstacle.userData.moduleId = instance.moduleId;
-        obstacle.userData.shootable = true;
-        obstacle.userData.collider = collider;
-        group.add(obstacle);
-        colliders.push(collider);
+        wall.position.set(collider.x, collider.height / 2, collider.z);
+        wall.rotation.y = collider.rotation;
+        wall.userData.moduleId = instance.moduleId;
+        wall.userData.shootable = true;
+        wall.userData.collider = collider;
+        group.add(wall);
       }
 
       if (role === 'objective' || role === 'extraction') {
@@ -245,6 +253,7 @@ export class ThreeWorldAssembler {
         });
       }
     }
+    const moduleAssemblyMs = elapsedMs(moduleAssemblyStart);
     for (const loot of generatedWorld.lootContainers ?? []) {
       const material = new THREE.MeshStandardMaterial({
         color: LOOT_COLORS[loot.kind] ?? LOOT_COLORS.crate,
@@ -301,7 +310,17 @@ export class ThreeWorldAssembler {
     }
     this.scene.add(group);
     this.group = group;
-    return { group, colliders, interactables, moduleCount: generatedWorld.modules.length };
+    return {
+      group,
+      colliders,
+      interactables,
+      moduleCount: generatedWorld.modules.length,
+      timings: {
+        colliderBuildMs,
+        moduleAssemblyMs,
+        worldAssemblyMs: elapsedMs(assemblyStart),
+      },
+    };
   }
 
   dispose() {

@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T05:33:19.259Z",
+  "generatedAt": "2026-08-03T05:53:11.698Z",
   "scenario": { "seed": "branching", "weapon": "rifle", "watcher": false },
   "generation": {
     "seed": "branching:world-attempt-0",
     "attempts": 1,
-    "validation": { "valid": true, "errors": [] }
+    "validation": { "valid": true, "errors": [] },
+    "timings": { "navCollisionBuildMs": 0.21, "worldGenerationMs": 0.76 }
   },
   "summary": {
     "modules": 10,

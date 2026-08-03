@@ -67,6 +67,7 @@ try {
       frameTimeMs: Number((elapsedMs / Math.max(1, frames)).toFixed(2)),
       renderer: debug?.getRendererInfo?.() || null,
       state: debug?.getState?.() || null,
+      runPerformance: debug?.getPerformanceState?.() || null,
       resourceCount: resources.length,
       encodedBytes: resources.reduce((sum, entry) => sum + (entry.encodedBodySize || 0), 0),
     };

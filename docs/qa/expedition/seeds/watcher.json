@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T05:33:19.350Z",
+  "generatedAt": "2026-08-03T05:53:11.786Z",
   "scenario": { "seed": "watcher", "weapon": "rifle", "watcher": true },
   "generation": {
     "seed": "watcher:world-attempt-0",
     "attempts": 1,
-    "validation": { "valid": true, "errors": [] }
+    "validation": { "valid": true, "errors": [] },
+    "timings": { "navCollisionBuildMs": 0.35, "worldGenerationMs": 17.13 }
   },
   "summary": {
     "modules": 11,
