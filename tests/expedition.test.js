@@ -43,6 +43,7 @@ describe('seeded expedition generation', () => {
       category: 'objective',
       tags: expect.arrayContaining(['power']),
     });
+    expect(registry.all().some((definition) => definition.obstacles.length > 0)).toBe(true);
     for (const definition of registry.all()) {
       expect(definition).toEqual(
         expect.objectContaining({
@@ -101,8 +102,11 @@ describe('seeded expedition generation', () => {
     expect(first.generationAttempts).toBeLessThanOrEqual(6);
     expect(first.navigationMesh.snapshot()).toMatchObject({
       nodeCount: first.graph.nodes.size,
-      polygonCount: first.graph.nodes.size * 2,
+      obstacleCount: expect.any(Number),
     });
+    const meshSnapshot = first.navigationMesh.snapshot();
+    expect(meshSnapshot.polygonCount).toBe(meshSnapshot.regionCount * 2);
+    expect(meshSnapshot.obstacleCount).toBeGreaterThan(0);
     expect(first.navigationMesh.validateRoute(first.navigation.main)).toBe(true);
     const navigationMesh = new ExpeditionNavMesh(first.graph);
     expect(navigationMesh.nodeForPosition(first.graph.getNode(first.graph.startNodeId).position)).toBe(
@@ -113,6 +117,21 @@ describe('seeded expedition generation', () => {
     expect(
       meshAgent.waypoint(first.graph.startNodeId, first.graph.getNode(first.graph.startNodeId).position),
     ).toMatchObject({ phase: 'local' });
+    const obstacleNodeId = [...first.navigationMesh.obstacles.entries()].find(
+      ([, obstacles]) => obstacles.length > 0,
+    )?.[0];
+    const obstacle = first.navigationMesh.obstacles.get(obstacleNodeId)?.[0];
+    expect(obstacleNodeId).toBeTruthy();
+    expect(
+      first.navigationMesh.isWalkable({ x: obstacle.minX + 0.5, z: obstacle.minZ + 0.5 }, obstacleNodeId),
+    ).toBe(false);
+    const obstaclePath = first.navigationMesh.pathWithinNode(
+      obstacleNodeId,
+      { x: obstacle.minX - 2, z: obstacle.minZ - 2 },
+      { x: obstacle.maxX + 2, z: obstacle.maxZ + 2 },
+    );
+    expect(obstaclePath.length).toBeGreaterThan(1);
+    expect(obstaclePath.every((point) => first.navigationMesh.isWalkable(point, obstacleNodeId))).toBe(true);
     navigationMesh.dispose();
   });
 
@@ -133,6 +152,7 @@ describe('seeded expedition generation', () => {
     expect(result.moduleCount).toBe(world.modules.length);
     expect(result.colliders.length).toBeGreaterThan(world.modules.length);
     expect(result.colliders.every((collider) => collider.height > 0)).toBe(true);
+    expect(result.colliders.some((collider) => collider.tag.includes('burned-vehicle'))).toBe(true);
     expect(result.group.children.some((child) => child.userData.shootable)).toBe(true);
     expect(scene.getObjectByName('expeditionWorld')).toBeTruthy();
     assembler.dispose();

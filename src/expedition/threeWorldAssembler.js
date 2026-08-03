@@ -197,6 +197,28 @@ export class ThreeWorldAssembler {
         colliders.push(wallData);
       }
 
+      for (const obstacleData of instance.definition.obstacles ?? []) {
+        const collider = {
+          ...obstacleData,
+          x: instance.position.x + obstacleData.x,
+          z: instance.position.z + obstacleData.z,
+          height: obstacleData.height ?? 2.2,
+          rotation: obstacleData.rotation ?? 0,
+          tag: instance.moduleId + ':' + (obstacleData.tag ?? 'obstacle'),
+        };
+        const obstacle = new THREE.Mesh(
+          new THREE.BoxGeometry(collider.hw * 2, collider.height, collider.hd * 2),
+          material,
+        );
+        obstacle.position.set(collider.x, collider.height / 2, collider.z);
+        obstacle.rotation.y = collider.rotation;
+        obstacle.userData.moduleId = instance.moduleId;
+        obstacle.userData.shootable = true;
+        obstacle.userData.collider = collider;
+        group.add(obstacle);
+        colliders.push(collider);
+      }
+
       if (role === 'objective' || role === 'extraction') {
         const marker = new THREE.Mesh(
           new THREE.CylinderGeometry(0.7, 0.7, 0.1, 16),

@@ -118,6 +118,8 @@ export class NavigationAgent {
     this.transitionIndex = 0;
     this.crossingIndex = null;
     this.localWaypointIndex = 0;
+    this.localPath = null;
+    this.localPathTransition = null;
   }
 
   setTarget(currentNodeId, targetNodeId) {
@@ -128,6 +130,8 @@ export class NavigationAgent {
     this.transitionIndex = 0;
     this.crossingIndex = null;
     this.localWaypointIndex = 0;
+    this.localPath = null;
+    this.localPathTransition = null;
     this.route =
       currentNodeId && targetNodeId && currentNodeId !== targetNodeId
         ? (this.planner?.plan(currentNodeId, targetNodeId) ?? null)
@@ -144,19 +148,33 @@ export class NavigationAgent {
         this.transitionIndex += 1;
         this.crossingIndex = null;
         this.localWaypointIndex = 0;
+        this.localPath = null;
+        this.localPathTransition = null;
         continue;
       }
       if (currentNodeId !== transition.from) return null;
       const localWaypoints = this.navigationMesh?.waypointsForTransition?.(transition) ?? null;
       if (localWaypoints?.length) {
-        if (this.localWaypointIndex >= localWaypoints.length) return null;
-        const localWaypoint = localWaypoints[this.localWaypointIndex];
+        if (this.localPathTransition !== transition || !this.localPath) {
+          const localPath = this.navigationMesh?.pathWithinNode?.(
+            currentNodeId,
+            position,
+            localWaypoints[0],
+          ) ?? [localWaypoints[0]];
+          this.localPath = localPath
+            .map((point) => ({ ...point, phase: 'local', transition }))
+            .concat(localWaypoints.slice(1));
+          this.localPathTransition = transition;
+          this.localWaypointIndex = 0;
+        }
+        if (this.localWaypointIndex >= this.localPath.length) return null;
+        const localWaypoint = this.localPath[this.localWaypointIndex];
         const localDistance = Math.hypot(position.x - localWaypoint.x, position.z - localWaypoint.z);
         if (localDistance <= radius) {
-          if (this.localWaypointIndex === 1) this.crossingIndex = this.transitionIndex;
+          if (localWaypoint.phase === 'exit') this.crossingIndex = this.transitionIndex;
           this.localWaypointIndex += 1;
-          if (this.localWaypointIndex >= localWaypoints.length) return null;
-          return { ...localWaypoints[this.localWaypointIndex], transition };
+          if (this.localWaypointIndex >= this.localPath.length) return null;
+          return { ...this.localPath[this.localWaypointIndex], transition };
         }
         return { ...localWaypoint, transition };
       }

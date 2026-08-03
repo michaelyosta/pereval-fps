@@ -32,7 +32,8 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
   expect(snapshot?.run?.map?.modules?.length).toBeLessThanOrEqual(16);
   const navigationMesh = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getNavigationMeshState?.());
   expect(navigationMesh?.nodeCount).toBe(snapshot?.run?.map?.modules?.length);
-  expect(navigationMesh?.polygonCount).toBe(navigationMesh?.nodeCount * 2);
+  expect(navigationMesh?.polygonCount).toBe(navigationMesh?.regionCount * 2);
+  expect(navigationMesh?.obstacleCount).toBeGreaterThan(0);
   expect(await page.locator('#debug-run-state').textContent()).toBe('Exploration');
   const objective = await page.evaluate(() => window.__PEREVAL_DEBUG__?.completeObjective?.());
   expect(objective?.completed).toBe(true);

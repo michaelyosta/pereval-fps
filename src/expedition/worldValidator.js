@@ -13,6 +13,13 @@ function findConnector(instance, id) {
   return instance.definition.connectors.find((connector) => connector.id === id) ?? null;
 }
 
+function obstacleOverlapsPoint(obstacle, point, margin = 0.35) {
+  return (
+    Math.abs(point.x - obstacle.x) < obstacle.hw + margin &&
+    Math.abs(point.z - obstacle.z) < obstacle.hd + margin
+  );
+}
+
 export class WorldValidator {
   validate(world) {
     const errors = [];
@@ -75,12 +82,23 @@ export class WorldValidator {
 
       for (const { instance } of graph.nodes.values()) {
         const definition = instance.definition;
+        for (const obstacle of definition.obstacles ?? []) {
+          if (
+            obstacle.hw <= 0 ||
+            obstacle.hd <= 0 ||
+            obstacle.x - obstacle.hw < definition.bounds.minX ||
+            obstacle.x + obstacle.hw > definition.bounds.maxX ||
+            obstacle.z - obstacle.hd < definition.bounds.minZ ||
+            obstacle.z + obstacle.hd > definition.bounds.maxZ
+          ) {
+            errors.push(`obstacle outside module bounds: ${definition.id}/${obstacle.tag ?? 'obstacle'}`);
+          }
+        }
         const points = [
           ...definition.spawnPoints,
           ...definition.lootPoints,
           ...definition.enemyPoints,
           ...definition.objectivePoints,
-          ...definition.coverPoints,
         ];
         for (const item of points) {
           if (
@@ -90,6 +108,8 @@ export class WorldValidator {
             item.z > definition.bounds.maxZ
           ) {
             errors.push(`point outside module bounds: ${definition.id}/${item.role ?? 'point'}`);
+          } else if ((definition.obstacles ?? []).some((obstacle) => obstacleOverlapsPoint(obstacle, item))) {
+            errors.push(`point inside obstacle: ${definition.id}/${item.role ?? 'point'}`);
           }
         }
       }

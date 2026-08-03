@@ -40,6 +40,7 @@ export class LevelModuleDefinition {
     enemyPoints = [],
     objectivePoints = [],
     coverPoints = [],
+    obstacles = [],
     audioZones = [],
     lightZones = [],
     tags = [],
@@ -60,6 +61,7 @@ export class LevelModuleDefinition {
     this.enemyPoints = enemyPoints.map((item) => ({ ...item }));
     this.objectivePoints = objectivePoints.map((item) => ({ ...item }));
     this.coverPoints = coverPoints.map((item) => ({ ...item }));
+    this.obstacles = obstacles.map((item) => ({ rotation: 0, height: 2.2, ...item }));
     this.audioZones = audioZones.map((item) => ({ ...item }));
     this.lightZones = lightZones.map((item) => ({ ...item }));
     this.tags = [...tags];
@@ -94,6 +96,10 @@ function connector(id, x, z, dx, dz, type = 'door', allowedCategories = ALL_CATE
     allowedCategories,
     playerTransition: { x: x + dx * 1.4, y: 0, z: z + dz * 1.4 },
   });
+}
+
+function obstacle(x, z, hw, hd, tag = 'cover', height = 2.2) {
+  return { x, z, hw, hd, tag, height, rotation: 0 };
 }
 
 function moduleDefinition(options) {
@@ -168,6 +174,7 @@ export function createDefaultModules() {
       ],
       objectivePoints: [point(0, -2, 'relay')],
       lootPoints: [point(-5, 4, 'supply'), point(5, -4, 'supply')],
+      obstacles: [obstacle(-3, 1.5, 1.1, 0.9, 'burned-vehicle'), obstacle(3, -1.5, 1.1, 0.9, 'crate-stack')],
     }),
     moduleDefinition({
       id: 'container_terminal',
@@ -184,6 +191,7 @@ export function createDefaultModules() {
       ],
       lootPoints: [point(-5, -4, 'container'), point(4, 4, 'container')],
       coverPoints: [point(-3, 0, 'container'), point(3, 0, 'container')],
+      obstacles: [obstacle(-3, 0, 1.1, 1.4, 'container-row'), obstacle(3, 0, 1.1, 1.4, 'container-row')],
     }),
     moduleDefinition({
       id: 'warehouse',
@@ -200,6 +208,7 @@ export function createDefaultModules() {
       ],
       lootPoints: [point(-4, -3, 'supply'), point(4, 2, 'ammo')],
       audioZones: [{ x: 0, z: 0, radius: 7, absorption: 0.05 }],
+      obstacles: [obstacle(0, 1.5, 1.5, 0.8, 'collapsed-shelf')],
     }),
     moduleDefinition({
       id: 'barracks',
@@ -234,6 +243,7 @@ export function createDefaultModules() {
       lootPoints: [point(5, -2, 'desk')],
       objectivePoints: [point(-2, 1, 'terminal')],
       coverPoints: [point(2, 3, 'rubble')],
+      obstacles: [obstacle(-3.5, -3, 1.2, 0.8, 'rubble-wall')],
     }),
     moduleDefinition({
       id: 'watchtower',
@@ -267,6 +277,7 @@ export function createDefaultModules() {
       lootPoints: [point(-6, 3, 'parts'), point(6, -3, 'weapon')],
       objectivePoints: [point(0, 0, 'machine')],
       audioZones: [{ x: 0, z: 0, radius: 10, absorption: 0.02 }],
+      obstacles: [obstacle(-4, 0.5, 1.5, 1, 'repair-bench'), obstacle(4, 0.5, 1.5, 1, 'repair-bench')],
     }),
     moduleDefinition({
       id: 'technical_corridor',
@@ -333,6 +344,7 @@ export function createDefaultModules() {
       ],
       objectivePoints: [point(0, 0, 'sample'), point(3, -2, 'console')],
       lootPoints: [point(-4, 3, 'medical')],
+      obstacles: [obstacle(-4, -3, 1, 1, 'sealed-cabinet')],
     }),
     moduleDefinition({
       id: 'dry_river',
@@ -365,6 +377,7 @@ export function createDefaultModules() {
       ],
       objectivePoints: [point(0, 0, 'anomaly-core')],
       enemyPoints: [point(-4, -3, 'anomaly'), point(4, 3, 'anomaly')],
+      obstacles: [obstacle(0, 4, 1.5, 0.8, 'anomaly-rubble')],
     }),
     moduleDefinition({
       id: 'extraction_zone',
@@ -381,6 +394,7 @@ export function createDefaultModules() {
       ],
       objectivePoints: [point(0, 0, 'extraction-device')],
       lootPoints: [point(-4, 3, 'last-supply')],
+      obstacles: [obstacle(4, -3, 1, 0.8, 'barrier')],
     }),
     moduleDefinition({
       id: 'hidden_cache',
@@ -410,6 +424,7 @@ export function createDefaultModules() {
       ],
       enemyPoints: [point(-5, 0, 'ambush'), point(5, 0, 'ambush')],
       coverPoints: [point(0, 0, 'burned-vehicle')],
+      obstacles: [obstacle(0, 2.5, 2, 1, 'burned-vehicle')],
     }),
     moduleDefinition({
       id: 'horror_dark_zone',

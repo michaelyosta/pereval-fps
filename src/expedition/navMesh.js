@@ -32,6 +32,66 @@ function insetBounds(bounds, inset) {
   };
 }
 
+function obstacleBounds(instance, obstacle, inset) {
+  const center = instance.worldPoint(obstacle);
+  return {
+    minX: center.x - obstacle.hw - inset,
+    maxX: center.x + obstacle.hw + inset,
+    minZ: center.z - obstacle.hd - inset,
+    maxZ: center.z + obstacle.hd + inset,
+    tag: obstacle.tag ?? 'obstacle',
+  };
+}
+
+function overlaps(a, b) {
+  return a.minX < b.maxX && a.maxX > b.minX && a.minZ < b.maxZ && a.maxZ > b.minZ;
+}
+
+function splitRectangle(rect, obstacle) {
+  if (!overlaps(rect, obstacle)) return [rect];
+  const minX = Math.max(rect.minX, obstacle.minX);
+  const maxX = Math.min(rect.maxX, obstacle.maxX);
+  const minZ = Math.max(rect.minZ, obstacle.minZ);
+  const maxZ = Math.min(rect.maxZ, obstacle.maxZ);
+  const pieces = [];
+  if (minX > rect.minX) pieces.push({ ...rect, maxX: minX });
+  if (maxX < rect.maxX) pieces.push({ ...rect, minX: maxX });
+  if (minZ > rect.minZ) pieces.push({ minX, maxX, minZ: rect.minZ, maxZ: minZ });
+  if (maxZ < rect.maxZ) pieces.push({ minX, maxX, minZ: maxZ, maxZ: rect.maxZ });
+  return pieces.filter((piece) => piece.minX < piece.maxX && piece.minZ < piece.maxZ);
+}
+
+function pointInsideRect(point, rect) {
+  return point.x > rect.minX && point.x < rect.maxX && point.z > rect.minZ && point.z < rect.maxZ;
+}
+
+function distanceToRect(point, rect) {
+  const x = Math.max(rect.minX, Math.min(point.x, rect.maxX));
+  const z = Math.max(rect.minZ, Math.min(point.z, rect.maxZ));
+  return Math.hypot(point.x - x, point.z - z);
+}
+
+function segmentClear(start, end, bounds, obstacles) {
+  const length = distance(start, end);
+  const steps = Math.max(1, Math.ceil(length / 0.25));
+  for (let index = 0; index <= steps; index += 1) {
+    const t = index / steps;
+    const point = {
+      x: start.x + (end.x - start.x) * t,
+      z: start.z + (end.z - start.z) * t,
+    };
+    if (
+      point.x < bounds.minX ||
+      point.x > bounds.maxX ||
+      point.z < bounds.minZ ||
+      point.z > bounds.maxZ ||
+      obstacles.some((obstacle) => pointInsideRect(point, obstacle))
+    )
+      return false;
+  }
+  return true;
+}
+
 function connectorFor(graph, nodeId, connectorId) {
   return graph.getNode(nodeId)?.definition?.connectors?.find((item) => item.id === connectorId) ?? null;
 }
@@ -68,6 +128,8 @@ export class ExpeditionNavMesh {
     this.clearance = Math.max(0, clearance);
     this.cellSize = Math.max(1, cellSize);
     this.polygons = new Map();
+    this.regions = new Map();
+    this.obstacles = new Map();
     this.nodeBounds = new Map();
     this.portals = new Map();
     this.cells = new Map();
@@ -80,14 +142,37 @@ export class ExpeditionNavMesh {
       const bounds = insetBounds(record.instance.bounds, this.agentRadius + this.clearance);
       if (bounds.minX >= bounds.maxX || bounds.minZ >= bounds.maxZ) continue;
       this.nodeBounds.set(nodeId, bounds);
-      const a = { x: bounds.minX, z: bounds.minZ };
-      const b = { x: bounds.maxX, z: bounds.minZ };
-      const c = { x: bounds.maxX, z: bounds.maxZ };
-      const d = { x: bounds.minX, z: bounds.maxZ };
-      this.polygons.set(nodeId, [
-        new NavMeshPolygon({ id: `${nodeId}:north-east`, nodeId, vertices: [a, b, c], bounds }),
-        new NavMeshPolygon({ id: `${nodeId}:south-west`, nodeId, vertices: [a, c, d], bounds }),
-      ]);
+      const obstacleRects = (record.instance.definition.obstacles ?? []).map((obstacle) =>
+        obstacleBounds(record.instance, obstacle, this.agentRadius + this.clearance),
+      );
+      let regions = [bounds];
+      for (const obstacle of obstacleRects)
+        regions = regions.flatMap((region) => splitRectangle(region, obstacle));
+      this.obstacles.set(nodeId, obstacleRects);
+      this.regions.set(nodeId, regions);
+      this.polygons.set(
+        nodeId,
+        regions.flatMap((region, index) => {
+          const a = { x: region.minX, z: region.minZ };
+          const b = { x: region.maxX, z: region.minZ };
+          const c = { x: region.maxX, z: region.maxZ };
+          const d = { x: region.minX, z: region.maxZ };
+          return [
+            new NavMeshPolygon({
+              id: `${nodeId}:${index}:north-east`,
+              nodeId,
+              vertices: [a, b, c],
+              bounds: region,
+            }),
+            new NavMeshPolygon({
+              id: `${nodeId}:${index}:south-west`,
+              nodeId,
+              vertices: [a, c, d],
+              bounds: region,
+            }),
+          ];
+        }),
+      );
       this.insertNode(nodeId, bounds);
     }
 
@@ -160,14 +245,12 @@ export class ExpeditionNavMesh {
     let nearest = null;
     let nearestDistance = Infinity;
     for (const nodeId of candidates) {
-      const bounds = this.nodeBounds.get(nodeId);
-      if (!bounds) continue;
-      const x = Math.max(bounds.minX, Math.min(point.x, bounds.maxX));
-      const z = Math.max(bounds.minZ, Math.min(point.z, bounds.maxZ));
-      const candidateDistance = Math.hypot(point.x - x, point.z - z);
-      if (candidateDistance < nearestDistance) {
-        nearest = nodeId;
-        nearestDistance = candidateDistance;
+      for (const region of this.regions.get(nodeId) ?? []) {
+        const candidateDistance = distanceToRect(point, region);
+        if (candidateDistance < nearestDistance) {
+          nearest = nodeId;
+          nearestDistance = candidateDistance;
+        }
       }
     }
     return nearest;
@@ -176,6 +259,58 @@ export class ExpeditionNavMesh {
   isWalkable(point, nodeId = this.nodeForPosition(point)) {
     if (!point || !nodeId) return false;
     return (this.polygons.get(nodeId) ?? []).some((polygon) => polygon.contains(point));
+  }
+
+  pathWithinNode(nodeId, start, target) {
+    const bounds = this.nodeBounds.get(nodeId);
+    const obstacles = this.obstacles.get(nodeId) ?? [];
+    if (!bounds || !start || !target) return target ? [clonePoint(target)] : [];
+    if (segmentClear(start, target, bounds, obstacles)) return [clonePoint(target)];
+
+    const points = [clonePoint(start), clonePoint(target)];
+    const cornerOffset = 0.12;
+    for (const obstacle of obstacles) {
+      const corners = [
+        { x: obstacle.minX - cornerOffset, z: obstacle.minZ - cornerOffset },
+        { x: obstacle.maxX + cornerOffset, z: obstacle.minZ - cornerOffset },
+        { x: obstacle.maxX + cornerOffset, z: obstacle.maxZ + cornerOffset },
+        { x: obstacle.minX - cornerOffset, z: obstacle.maxZ + cornerOffset },
+      ];
+      for (const corner of corners) {
+        if (
+          corner.x > bounds.minX &&
+          corner.x < bounds.maxX &&
+          corner.z > bounds.minZ &&
+          corner.z < bounds.maxZ &&
+          !obstacles.some((other) => pointInsideRect(corner, other))
+        )
+          points.push(corner);
+      }
+    }
+
+    const costs = new Map([[0, 0]]);
+    const previous = new Map();
+    const queue = [{ index: 0, cost: 0 }];
+    while (queue.length) {
+      queue.sort((left, right) => left.cost - right.cost || left.index - right.index);
+      const current = queue.shift();
+      if (current.index === 1) break;
+      if (current.cost !== costs.get(current.index)) continue;
+      for (let next = 0; next < points.length; next += 1) {
+        if (next === current.index || !segmentClear(points[current.index], points[next], bounds, obstacles))
+          continue;
+        const nextCost = current.cost + distance(points[current.index], points[next]);
+        if (nextCost >= (costs.get(next) ?? Infinity)) continue;
+        costs.set(next, nextCost);
+        previous.set(next, current.index);
+        queue.push({ index: next, cost: nextCost });
+      }
+    }
+    if (!costs.has(1)) return [clonePoint(target)];
+    const path = [];
+    for (let index = 1; index !== undefined; index = previous.get(index))
+      path.unshift(clonePoint(points[index]));
+    return path;
   }
 
   portal(fromId, toId) {
@@ -210,9 +345,14 @@ export class ExpeditionNavMesh {
   validateRoute(route) {
     if (!route?.nodes?.length) return false;
     if (route.nodes.some((nodeId) => !this.polygons.has(nodeId))) return false;
-    return (route.transitions ?? []).every((transition) =>
-      Boolean(this.portal(transition.from, transition.to)),
-    );
+    return (route.transitions ?? []).every((transition) => {
+      const portal = this.portal(transition.from, transition.to);
+      return Boolean(
+        portal &&
+        this.isWalkable(portal.fromInside, transition.from) &&
+        this.isWalkable(portal.toInside, transition.to),
+      );
+    });
   }
 
   snapshot() {
@@ -220,6 +360,8 @@ export class ExpeditionNavMesh {
       agentRadius: this.agentRadius,
       clearance: this.clearance,
       polygonCount: [...this.polygons.values()].reduce((count, polygons) => count + polygons.length, 0),
+      regionCount: [...this.regions.values()].reduce((count, regions) => count + regions.length, 0),
+      obstacleCount: [...this.obstacles.values()].reduce((count, obstacles) => count + obstacles.length, 0),
       nodeCount: this.nodeBounds.size,
       portalCount: this.portals.size,
       indexedCellCount: this.cells.size,
@@ -228,6 +370,8 @@ export class ExpeditionNavMesh {
 
   dispose() {
     this.polygons.clear();
+    this.regions.clear();
+    this.obstacles.clear();
     this.nodeBounds.clear();
     this.portals.clear();
     this.cells.clear();

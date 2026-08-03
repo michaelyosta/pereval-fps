@@ -26,10 +26,10 @@ Movement, sprinting, shots, loot, objectives, events, and extraction emit NoiseS
 
 ## Navigation and pursuit
 
-World generation produces connector-aware main/objective/alternative-extraction routes. The planner validates connector type, blocked state, allowed categories, transition points, route cost, and next connector. Encounter candidates must be reachable through that planner, not merely present in the graph. Each generated module now contributes two deterministic walkable navmesh polygons with an indexed spatial lookup, and connector portals provide local exit/crossing/entry waypoints for bots. Arbitrary internal obstacle baking and a fully general long-range polygon path follower remain outside this vertical slice.
+World generation produces connector-aware main/objective/alternative-extraction routes. The planner validates connector type, blocked state, allowed categories, transition points, route cost, and next connector. Encounter candidates must be reachable through that planner, not merely present in the graph. Each generated module contributes clearance-adjusted walkable navmesh regions split around authored axis-aligned obstacles, triangulated with an indexed spatial lookup; connector portals provide local exit/crossing/entry waypoints and visibility paths for bots. Dynamic/rotated arbitrary geometry and a fully general long-range polygon path follower remain outside this vertical slice.
 
 EncounterDirector reserves a finite initial budget, then schedules dormant seeded enemy groups in response to threat, anomaly, loud noise, or extraction pressure. The main thread consumes the request through the real bot spawn pipeline. Expedition kills do not respawn the group, preserving a finite encounter economy.
 
 ## Deferred systems
 
-The current milestone intentionally keeps the whole generated world loaded and uses authored box colliders plus a module-local polygon navmesh. Visual weapon models and audio are shared procedural adapters; arbitrary obstacle baking, replacing them with authored assets, code splitting, and draw-call-heavy decoration profiling are deferred.
+The current milestone intentionally keeps the whole generated world loaded and uses authored box colliders plus a module-local polygon navmesh. Visual weapon models and audio are shared procedural adapters; dynamic/rotated obstacle baking, replacing them with authored assets, code splitting, and draw-call-heavy decoration profiling are deferred.

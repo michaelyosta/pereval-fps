@@ -32,7 +32,10 @@ test('restarts seeded expedition scenes without stale runtime state', async ({ p
   expect(samples.every((sample) => sample.state === 'Exploration')).toBe(true);
   expect(samples.every((sample) => sample.modules >= 10 && sample.modules <= 16)).toBe(true);
   expect(samples.every((sample) => Number.isFinite(sample.renderer?.calls))).toBe(true);
-  expect(samples.every((sample) => sample.navMesh?.polygonCount === sample.modules * 2)).toBe(true);
+  expect(samples.every((sample) => sample.navMesh?.polygonCount === sample.navMesh?.regionCount * 2)).toBe(
+    true,
+  );
+  expect(samples.every((sample) => sample.navMesh?.obstacleCount > 0)).toBe(true);
   expect(samples.every((sample) => sample.elapsed < 1)).toBe(true);
   const geometryCounts = samples.map((sample) => sample.renderer?.memory?.geometries ?? 0);
   expect(Math.max(...geometryCounts) - Math.min(...geometryCounts)).toBeLessThanOrEqual(2);
