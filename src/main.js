@@ -11,9 +11,6 @@ import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { EventBus } from './core/EventBus.js';
 import { damagePlayer as applyPlayerDamage, respawnPlayer as resetPlayerState } from './core/gameplay.js';
 import { resolveCapsuleMotion } from './core/collision.js';
-import * as combatModule from './combat.js';
-import * as botsModule from './bots.js';
-import * as uiModule from './ui.js';
 import { getQualityPreset, QUALITY_PRESETS } from './config/graphics.js';
 import { RunManager } from './core/expedition/RunManager.js';
 import { ThreeWorldAssembler } from './expedition/threeWorldAssembler.js';
@@ -92,7 +89,7 @@ bloom.strength = quality.bloom;
 grainPass.uniforms.amount.value = quality.grain;
 
 // ---------- контракт GAME ----------
-const mods = { world: null, combat: combatModule, bots: botsModule, ui: uiModule };
+const mods = { world: null, combat: null, bots: null, ui: null };
 const campaignStorage = (() => {
   try { return window.localStorage; } catch { return null; }
 })();
@@ -1047,6 +1044,14 @@ window.addEventListener('resize', () => {
 
 // ---------- старт ----------
 async function boot() {
+  const [combat, bots, ui] = await Promise.all([
+    import('./combat.js'),
+    import('./bots.js'),
+    import('./ui.js'),
+  ]);
+  mods.combat = combat;
+  mods.bots = bots;
+  mods.ui = ui;
   if (LEGACY_ARENA) mods.world = await import('./world.js');
   if (g.expedition) {
     g.expedition.start();
