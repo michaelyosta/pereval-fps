@@ -35,6 +35,8 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
   expect(navigationMesh?.polygonCount).toBe(navigationMesh?.regionCount * 2);
   expect(navigationMesh?.obstacleCount).toBeGreaterThan(0);
   expect(navigationMesh?.rotatedObstacleCount).toBeGreaterThan(0);
+  const baselineDynamicObstacleCount = navigationMesh?.dynamicObstacleCount ?? 0;
+  const baselineDynamicRotatedObstacleCount = navigationMesh?.dynamicRotatedObstacleCount ?? 0;
   const dynamicObstacle = await page.evaluate(() => {
     const map = window.__PEREVAL_DEBUG__?.getRunState?.().run?.map;
     const node = map?.graph?.getNode?.(map?.graph?.startNodeId);
@@ -55,8 +57,8 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
     ),
   ).toMatchObject({ id: 'e2e-moving-crate', dynamic: true });
   expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getNavigationMeshState?.())).toMatchObject({
-    dynamicObstacleCount: 1,
-    dynamicRotatedObstacleCount: 1,
+    dynamicObstacleCount: baselineDynamicObstacleCount + 1,
+    dynamicRotatedObstacleCount: baselineDynamicRotatedObstacleCount + 1,
   });
   expect(
     await page.evaluate(() =>
@@ -67,7 +69,7 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
     await page.evaluate(() => window.__PEREVAL_DEBUG__?.removeDynamicObstacle?.('e2e-moving-crate')),
   ).toBe(true);
   expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getNavigationMeshState?.())).toMatchObject({
-    dynamicObstacleCount: 0,
+    dynamicObstacleCount: baselineDynamicObstacleCount,
   });
   const performance = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getPerformanceState?.());
   expect(performance).toEqual(
@@ -118,6 +120,46 @@ test('starts a seeded expedition run without browser errors', async ({ page }) =
   await expect(page.locator('#expedition-lobby')).toBeVisible();
   await expect(page.locator('#hideout-unlocks')).toContainText('field-clearance');
   await expect(page.locator('#hideout-history-list')).toContainText('FAILED');
+  expect(pageErrors).toEqual([]);
+  expect(consoleErrors).toEqual([]);
+});
+
+test('resolves event-driven runtime obstacles in a seeded expedition', async ({ page }) => {
+  const pageErrors = [];
+  const consoleErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(String(error)));
+  page.on('console', (message) => {
+    if (message.type() === 'error') consoleErrors.push(message.text());
+  });
+
+  await page.goto('/?mode=expedition&seed=dynamic-event-e2e&testMode=1&watcher=0&debug=1');
+  await page.locator('#title').click();
+  await page.locator('#hideout-loadout').click();
+  await page.locator('#loadout-deploy').click();
+  await page.waitForTimeout(300);
+
+  const snapshot = await page.evaluate(() => window.__PEREVAL_DEBUG__?.getRunState?.());
+  const dynamicEvents = snapshot?.run?.events?.filter((event) => event.dynamicObstacleActive) ?? [];
+  expect(dynamicEvents.map((event) => event.type).sort()).toEqual(['armory', 'blocked-route']);
+  expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getDynamicObstacles?.())).toHaveLength(2);
+  expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getNavigationMeshState?.())).toMatchObject({
+    dynamicObstacleCount: 2,
+    dynamicRotatedObstacleCount: 1,
+  });
+
+  const blockedRoute = dynamicEvents.find((event) => event.type === 'blocked-route');
+  expect(
+    await page.evaluate((id) => window.__PEREVAL_DEBUG__?.resolveEvent?.(id), blockedRoute.id),
+  ).toMatchObject({ ok: true, type: 'blocked-route' });
+  expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getDynamicObstacles?.())).toHaveLength(1);
+  expect(await page.evaluate(() => window.__PEREVAL_DEBUG__?.getNavigationMeshState?.())).toMatchObject({
+    dynamicObstacleCount: 1,
+  });
+  const resolved = await page.evaluate(
+    (id) => window.__PEREVAL_DEBUG__?.getRunState?.().run?.events?.find((event) => event.id === id),
+    blockedRoute.id,
+  );
+  expect(resolved).toMatchObject({ resolved: true, dynamicObstacleActive: false });
   expect(pageErrors).toEqual([]);
   expect(consoleErrors).toEqual([]);
 });

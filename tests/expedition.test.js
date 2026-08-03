@@ -616,6 +616,32 @@ describe('expedition interaction services', () => {
     expect(manager.state).toBe(RunState.Exploration);
   });
 
+  it('activates event-driven obstacles and clears them when the event is resolved', () => {
+    const manager = new RunManager();
+    manager.start();
+    manager.openHideout();
+    manager.openLoadout();
+    manager.beginRun({ seed: 'dynamic-event-e2e', testMode: true, watcher: false });
+    manager.deploy();
+
+    const dynamicEvents = manager.run.eventDirector.available().filter((event) => event.dynamicObstacleId);
+    expect(dynamicEvents.map((event) => event.type).sort()).toEqual(['armory', 'blocked-route']);
+    expect(manager.getDynamicObstacles()).toHaveLength(2);
+    expect(manager.run.map.navigationMesh.snapshot()).toMatchObject({
+      dynamicObstacleCount: 2,
+      dynamicRotatedObstacleCount: 1,
+    });
+
+    const blockedRoute = dynamicEvents.find((event) => event.type === 'blocked-route');
+    expect(manager.resolveEvent(blockedRoute.id)).toMatchObject({ ok: true, type: 'blocked-route' });
+    expect(manager.getDynamicObstacles()).toHaveLength(1);
+    expect(manager.run.eventDirector.get(blockedRoute.id)).toMatchObject({
+      resolved: true,
+      dynamicObstacleActive: false,
+    });
+    expect(manager.run.map.navigationMesh.snapshot()).toMatchObject({ dynamicObstacleCount: 1 });
+  });
+
   it('provides four distinct weapon behaviors and twelve expiring temporary skills', () => {
     const weapons = new WeaponRegistry();
     expect(weapons.all()).toHaveLength(4);

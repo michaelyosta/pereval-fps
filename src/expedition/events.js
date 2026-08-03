@@ -66,8 +66,62 @@ export const EVENT_DEFINITIONS = Object.freeze({
   },
 });
 
+const EVENT_RUNTIME_OBSTACLES = Object.freeze({
+  armory: Object.freeze({
+    anchor: 'east',
+    hw: 0.55,
+    hd: 1.8,
+    height: 2.6,
+    rotation: 0,
+    tag: 'event:armory-shutter',
+  }),
+  'blocked-route': Object.freeze({
+    anchor: 'north',
+    hw: 1.5,
+    hd: 0.55,
+    height: 2.4,
+    rotation: Math.PI / 8,
+    tag: 'event:blocked-route',
+  }),
+});
+
+function clamp(value, min, max) {
+  if (min > max) return (min + max) / 2;
+  return Math.min(max, Math.max(min, value));
+}
+
 export function getEventDefinition(type) {
-  return EVENT_DEFINITIONS[type] ?? EVENT_DEFINITIONS['blocked-route'];
+  const definition = EVENT_DEFINITIONS[type] ?? EVENT_DEFINITIONS['blocked-route'];
+  const dynamicObstacle = EVENT_RUNTIME_OBSTACLES[type] ?? null;
+  return dynamicObstacle ? { ...definition, dynamicObstacle: { ...dynamicObstacle } } : definition;
+}
+
+export function createEventObstacle(event, node) {
+  const dynamicObstacle = getEventDefinition(event?.type).dynamicObstacle;
+  if (!event?.id || !event?.nodeId || !node || !dynamicObstacle) return null;
+  const bounds = node.bounds;
+  const maxHw = Math.max(0.35, (bounds.maxX - bounds.minX) / 2 - 0.5);
+  const maxHd = Math.max(0.35, (bounds.maxZ - bounds.minZ) / 2 - 0.5);
+  const hw = Math.min(dynamicObstacle.hw, maxHw);
+  const hd = Math.min(dynamicObstacle.hd, maxHd);
+  let x = node.position.x;
+  let z = node.position.z;
+  if (dynamicObstacle.anchor === 'north') z = bounds.minZ + hd + 0.75;
+  if (dynamicObstacle.anchor === 'south') z = bounds.maxZ - hd - 0.75;
+  if (dynamicObstacle.anchor === 'west') x = bounds.minX + hw + 0.75;
+  if (dynamicObstacle.anchor === 'east') x = bounds.maxX - hw - 0.75;
+  return {
+    id: event.dynamicObstacleId ?? `event-obstacle:${event.id}`,
+    eventId: event.id,
+    nodeId: event.nodeId,
+    x: clamp(x, bounds.minX + hw, bounds.maxX - hw),
+    z: clamp(z, bounds.minZ + hd, bounds.maxZ - hd),
+    hw,
+    hd,
+    height: dynamicObstacle.height,
+    rotation: dynamicObstacle.rotation,
+    tag: dynamicObstacle.tag,
+  };
 }
 
 export class EventDirector {
@@ -76,6 +130,12 @@ export class EventDirector {
       ...event,
       resolved: event.resolved === true,
       definition: getEventDefinition(event.type),
+      dynamicObstacleId:
+        event.dynamicObstacleId ??
+        (getEventDefinition(event.type).dynamicObstacle ? `event-obstacle:${event.id}` : null),
+      dynamicObstacleActive:
+        event.dynamicObstacleActive ??
+        (!event.resolved && Boolean(getEventDefinition(event.type).dynamicObstacle)),
     }));
   }
 
@@ -121,6 +181,8 @@ export class EventDirector {
       nodeId: event.nodeId,
       optional: event.optional,
       resolved: event.resolved,
+      dynamicObstacleId: event.dynamicObstacleId,
+      dynamicObstacleActive: event.dynamicObstacleActive,
     }));
   }
 }

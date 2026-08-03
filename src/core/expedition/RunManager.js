@@ -10,7 +10,7 @@ import { SkillRegistry } from '../../expedition/skills.js';
 import { NoiseSystem } from '../../expedition/noise.js';
 import { AnomalyLevel } from '../../expedition/anomalyLevel.js';
 import { WatcherDirector } from '../../expedition/watcher.js';
-import { EventDirector } from '../../expedition/events.js';
+import { createEventObstacle, EventDirector } from '../../expedition/events.js';
 import { EncounterDirector } from '../../expedition/encounters.js';
 
 function monotonicNow() {
@@ -38,6 +38,7 @@ export class RunManager {
     this.watcher = null;
     this.eventDirector = null;
     this.encounterDirector = null;
+    this.dynamicObstacles = new Map();
     this.noiseSequence = 0;
     this.lastNoiseId = null;
     this.performance = {};
@@ -123,6 +124,8 @@ export class RunManager {
         enabled: config.watcher,
       });
       this.eventDirector = new EventDirector(generatedWorld.events);
+      this.dynamicObstacles.clear();
+      this.initializeEventObstacles(generatedWorld);
       this.encounterDirector = new EncounterDirector({
         groups: generatedWorld.enemyGroups,
         graph: generatedWorld.graph,
@@ -200,6 +203,93 @@ export class RunManager {
     this.performance = { ...this.performance, ...timings };
     if (this.run) this.run.performance = { ...this.performance };
     return { ...this.performance };
+  }
+
+  dynamicObstacleSnapshots() {
+    return [...this.dynamicObstacles.values()].map((entry) => ({
+      ...entry.source,
+      id: entry.id,
+      nodeId: entry.nodeId,
+      eventId: entry.eventId ?? null,
+    }));
+  }
+
+  initializeEventObstacles(generatedWorld) {
+    for (const event of this.eventDirector?.available?.() ?? []) {
+      const node = generatedWorld.graph.getNode(event.nodeId);
+      const obstacle = createEventObstacle(event, node);
+      if (!obstacle) continue;
+      const record = generatedWorld.setDynamicObstacle(obstacle.id, obstacle.nodeId, obstacle);
+      if (!record) continue;
+      this.dynamicObstacles.set(record.id, {
+        id: record.id,
+        nodeId: record.nodeId,
+        eventId: event.id,
+        source: { ...record.source },
+      });
+      event.dynamicObstacleActive = true;
+    }
+    if (this.run) this.run.dynamicObstacles = this.dynamicObstacleSnapshots();
+    return this.dynamicObstacleSnapshots();
+  }
+
+  getDynamicObstacles() {
+    return this.dynamicObstacleSnapshots();
+  }
+
+  addDynamicObstacle(options = {}) {
+    if (!this.run?.map || !options.id || !options.nodeId) return null;
+    const record = this.run.map.setDynamicObstacle(options.id, options.nodeId, options);
+    if (!record) return null;
+    this.dynamicObstacles.set(record.id, {
+      id: record.id,
+      nodeId: record.nodeId,
+      eventId: options.eventId ?? null,
+      source: { ...record.source },
+    });
+    this.run.dynamicObstacles = this.dynamicObstacleSnapshots();
+    const result = { ...record, source: { ...record.source } };
+    this.emit({ type: 'dynamic-obstacle-added', obstacle: result });
+    return result;
+  }
+
+  updateDynamicObstacle(id, patch = {}) {
+    if (!this.run?.map || !this.dynamicObstacles.has(id)) return null;
+    const record = this.run.map.updateDynamicObstacle(id, patch);
+    if (!record) return null;
+    const entry = this.dynamicObstacles.get(id);
+    entry.nodeId = record.nodeId;
+    entry.source = { ...record.source };
+    this.run.dynamicObstacles = this.dynamicObstacleSnapshots();
+    const result = { ...record, source: { ...record.source } };
+    this.emit({ type: 'dynamic-obstacle-updated', obstacle: result });
+    return result;
+  }
+
+  removeDynamicObstacle(id, reason = 'removed') {
+    if (!this.run?.map || !this.dynamicObstacles.has(id)) return false;
+    const entry = this.dynamicObstacles.get(id);
+    if (!this.run.map.removeDynamicObstacle(id)) return false;
+    this.dynamicObstacles.delete(id);
+    const event = entry.eventId ? this.eventDirector?.get(entry.eventId) : null;
+    if (event) event.dynamicObstacleActive = false;
+    this.run.dynamicObstacles = this.dynamicObstacleSnapshots();
+    this.emit({
+      type: 'dynamic-obstacle-removed',
+      id,
+      nodeId: entry.nodeId,
+      eventId: entry.eventId ?? null,
+      reason,
+    });
+    return true;
+  }
+
+  clearDynamicObstacles(nodeId = null, reason = 'cleared') {
+    const ids = [...this.dynamicObstacles.values()]
+      .filter((entry) => !nodeId || entry.nodeId === nodeId)
+      .map((entry) => entry.id);
+    for (const id of ids) this.removeDynamicObstacle(id, reason);
+    return ids.length;
   }
 
   restart(reason = 'restart') {
@@ -376,6 +466,7 @@ export class RunManager {
       duration: 1.2,
     });
     if (event.skill) this.offerSkillChoice(`event:${event.type}`);
+    if (event.dynamicObstacleId) this.removeDynamicObstacle(event.dynamicObstacleId, 'event-resolved');
     this.emit({ type: 'event-resolved', eventId, eventType: event.type, items: collected });
     return { ok: true, eventId, type: event.type, items: collected };
   }
@@ -689,6 +780,7 @@ export class RunManager {
             watcher: this.watcher?.snapshot?.() ?? null,
             encounters: this.encounterDirector?.snapshot?.() ?? null,
             events: this.eventDirector?.snapshot?.() ?? [],
+            dynamicObstacles: this.dynamicObstacleSnapshots(),
             loot: [...this.run.loot],
             stats: { ...this.run.stats },
             visitedModules: [...this.run.visitedModules],

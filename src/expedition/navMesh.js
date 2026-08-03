@@ -140,6 +140,7 @@ export class ExpeditionNavMesh {
     this.obstacles = new Map();
     this.dynamicObstacles = new Map();
     this.dynamicObstacleRecords = new Map();
+    this.revision = 0;
     this.nodeBounds = new Map();
     this.portals = new Map();
     this.cells = new Map();
@@ -294,6 +295,7 @@ export class ExpeditionNavMesh {
     if (!this.dynamicObstacles.has(nodeId)) this.dynamicObstacles.set(nodeId, new Map());
     this.dynamicObstacles.get(nodeId).set(id, record);
     this.dynamicObstacleRecords.set(id, record);
+    this.revision += 1;
     return { ...record, source: { ...source } };
   }
 
@@ -312,6 +314,7 @@ export class ExpeditionNavMesh {
     this.dynamicObstacles.get(current.nodeId)?.delete(id);
     if (this.dynamicObstacles.get(current.nodeId)?.size === 0) this.dynamicObstacles.delete(current.nodeId);
     this.dynamicObstacleRecords.delete(id);
+    this.revision += 1;
     return true;
   }
 
@@ -425,6 +428,7 @@ export class ExpeditionNavMesh {
       dynamicObstacleCount: dynamicObstacles.length,
       dynamicRotatedObstacleCount: dynamicObstacles.filter((obstacle) => !isAxisAlignedObstacle(obstacle))
         .length,
+      revision: this.revision,
       nodeCount: this.nodeBounds.size,
       portalCount: this.portals.size,
       indexedCellCount: this.cells.size,
@@ -437,6 +441,7 @@ export class ExpeditionNavMesh {
     this.obstacles.clear();
     this.dynamicObstacles.clear();
     this.dynamicObstacleRecords.clear();
+    this.revision += 1;
     this.nodeBounds.clear();
     this.portals.clear();
     this.cells.clear();

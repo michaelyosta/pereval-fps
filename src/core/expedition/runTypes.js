@@ -137,6 +137,7 @@ export class ActiveRun {
       eventsResolved: 0,
     };
     this.temporarySkills = [];
+    this.dynamicObstacles = [];
     this.skillOptions = [];
     this.skillChoiceOpen = false;
     this.permanentRewards = [];

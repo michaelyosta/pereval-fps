@@ -397,6 +397,7 @@ export class ThreeWorldAssembler {
         height: options.height ?? 2.2,
         rotation: options.rotation ?? 0,
         tag: options.tag ?? `dynamic:${id}`,
+        eventId: options.eventId ?? null,
       };
       const material = new THREE.MeshStandardMaterial({ color: 0x9f6e52, roughness: 0.9, metalness: 0.05 });
       const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
@@ -404,6 +405,7 @@ export class ThreeWorldAssembler {
       mesh.scale.set(hw * 2, collider.height, hd * 2);
       mesh.rotation.y = collider.rotation;
       mesh.userData.dynamicObstacleId = id;
+      mesh.userData.eventId = options.eventId ?? null;
       mesh.userData.moduleId = nodeId;
       mesh.userData.shootable = true;
       mesh.userData.collider = collider;
@@ -428,11 +430,13 @@ export class ThreeWorldAssembler {
         height: source.height ?? entry.collider.height,
         rotation: source.rotation ?? 0,
         tag: source.tag ?? entry.collider.tag,
+        eventId: source.eventId ?? entry.collider.eventId ?? null,
       });
       entry.mesh.position.set(entry.collider.x, entry.collider.height / 2, entry.collider.z);
       entry.mesh.scale.set(entry.collider.hw * 2, entry.collider.height, entry.collider.hd * 2);
       entry.mesh.rotation.y = entry.collider.rotation;
       entry.mesh.userData.moduleId = record.nodeId;
+      entry.mesh.userData.eventId = entry.collider.eventId;
       return { ...record, collider: { ...entry.collider } };
     };
 

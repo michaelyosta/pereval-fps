@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T07:40:15.575Z",
+  "generatedAt": "2026-08-03T07:59:45.227Z",
   "scenario": { "seed": "low-loot", "weapon": "pistol", "watcher": false },
   "generation": {
     "seed": "low-loot:world-attempt-0",
     "attempts": 1,
     "validation": { "valid": true, "errors": [] },
-    "timings": { "navCollisionBuildMs": 0.38, "worldGenerationMs": 1.26 }
+    "timings": { "navCollisionBuildMs": 0.17, "worldGenerationMs": 0.93 }
   },
   "summary": {
     "modules": 11,
@@ -305,6 +305,7 @@
     "rotatedObstacleCount": 10,
     "dynamicObstacleCount": 0,
     "dynamicRotatedObstacleCount": 0,
+    "revision": 0,
     "nodeCount": 11,
     "portalCount": 22,
     "indexedCellCount": 33

@@ -120,6 +120,7 @@ export class NavigationAgent {
     this.localWaypointIndex = 0;
     this.localPath = null;
     this.localPathTransition = null;
+    this.localPathRevision = -1;
     this.mode = 'idle';
     this.localPathLength = 0;
   }
@@ -134,6 +135,7 @@ export class NavigationAgent {
     this.localWaypointIndex = 0;
     this.localPath = null;
     this.localPathTransition = null;
+    this.localPathRevision = -1;
     this.mode = 'route';
     this.localPathLength = 0;
     this.route =
@@ -167,12 +169,18 @@ export class NavigationAgent {
         this.localWaypointIndex = 0;
         this.localPath = null;
         this.localPathTransition = null;
+        this.localPathRevision = -1;
         continue;
       }
       if (currentNodeId !== transition.from) return null;
       const localWaypoints = this.navigationMesh?.waypointsForTransition?.(transition) ?? null;
       if (localWaypoints?.length) {
-        if (this.localPathTransition !== transition || !this.localPath) {
+        const navigationRevision = this.navigationMesh?.revision ?? 0;
+        if (
+          this.localPathTransition !== transition ||
+          !this.localPath ||
+          this.localPathRevision !== navigationRevision
+        ) {
           const localPath = this.navigationMesh?.pathWithinNode?.(
             currentNodeId,
             position,
@@ -182,6 +190,7 @@ export class NavigationAgent {
             .map((point) => ({ ...point, phase: 'local', transition }))
             .concat(localWaypoints.slice(1));
           this.localPathTransition = transition;
+          this.localPathRevision = navigationRevision;
           this.localWaypointIndex = 0;
         }
         if (this.localWaypointIndex >= this.localPath.length) return null;
@@ -220,6 +229,7 @@ export class NavigationAgent {
       localWaypointIndex: this.localWaypointIndex,
       mode: this.mode,
       localPathLength: this.localPathLength,
+      localPathRevision: this.localPathRevision,
       nodes: this.route?.nodes ? [...this.route.nodes] : [],
     };
   }

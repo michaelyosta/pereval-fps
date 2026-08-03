@@ -186,6 +186,7 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
       g.expedition?.run?.map?.navigationMesh?.pathWithinNode?.(nodeId, start, target) ?? [],
     getPerformanceState: () => ({ ...(g.expedition?.run?.performance ?? {}) }),
     getRunState: () => g.expedition?.snapshot?.() ?? null,
+    getDynamicObstacles: () => g.expedition?.getDynamicObstacles?.() ?? [],
     getEncounterState: () => g.expedition?.encounterDirector?.snapshot?.() ?? null,
     getBotState: () => mods.bots?.getBots?.().map((bot) => ({
       id: bot.id,
@@ -209,6 +210,7 @@ if (import.meta.env?.DEV || PARAMS.has('debug')) {
       return g.expedition.snapshot();
     },
     completeObjective: () => g.expedition?.completeObjective?.() ?? null,
+    resolveEvent: (id) => g.expedition?.resolveEvent?.(id) ?? null,
     startExtraction: () => {
       if (!g.expedition) return null;
       g.expedition.activateExtraction();
@@ -594,6 +596,8 @@ function mountExpeditionWorld(run) {
   if (g.staticGroup) g.staticGroup.visible = false;
   g.expeditionScene = g.expeditionAssembler.assemble(run.map);
   g.expedition.recordPerformance(g.expeditionScene.timings);
+  for (const obstacle of g.expedition.getDynamicObstacles?.() ?? [])
+    g.expeditionScene.addDynamicObstacle?.(obstacle);
   registerExpeditionInteractions(run, g.expeditionScene);
   const startNode = run.map.graph.getNode(run.map.graph.startNodeId);
   if (startNode) {
@@ -1058,6 +1062,11 @@ async function boot() {
         const result = mods.bots?.spawnEncounter?.(g, event);
         if (!result?.ok) g.expedition?.encounterDirector?.markFailed?.(event.groupId, result?.reason);
       }
+      if (event.type === 'dynamic-obstacle-added')
+        g.expeditionScene?.addDynamicObstacle?.(event.obstacle);
+      if (event.type === 'dynamic-obstacle-updated')
+        g.expeditionScene?.updateDynamicObstacle?.(event.obstacle.id, event.obstacle.source);
+      if (event.type === 'dynamic-obstacle-removed') g.expeditionScene?.removeDynamicObstacle?.(event.id);
     });
   }
   if (mods.world && mods.world.init) mods.world.init(g);

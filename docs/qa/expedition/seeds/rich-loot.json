@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T07:40:15.593Z",
+  "generatedAt": "2026-08-03T07:59:45.248Z",
   "scenario": { "seed": "rich-loot", "weapon": "shotgun", "watcher": false },
   "generation": {
     "seed": "rich-loot:world-attempt-0",
     "attempts": 1,
     "validation": { "valid": true, "errors": [] },
-    "timings": { "navCollisionBuildMs": 0.14, "worldGenerationMs": 0.82 }
+    "timings": { "navCollisionBuildMs": 0.18, "worldGenerationMs": 0.95 }
   },
   "summary": {
     "modules": 10,
@@ -296,6 +296,7 @@
     "rotatedObstacleCount": 9,
     "dynamicObstacleCount": 0,
     "dynamicRotatedObstacleCount": 0,
+    "revision": 0,
     "nodeCount": 10,
     "portalCount": 20,
     "indexedCellCount": 31

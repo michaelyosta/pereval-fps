@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T07:40:15.355Z",
+  "generatedAt": "2026-08-03T07:59:44.983Z",
   "scenario": { "seed": "short-linear", "weapon": "pistol", "watcher": false },
   "generation": {
     "seed": "short-linear:world-attempt-0",
     "attempts": 1,
     "validation": { "valid": true, "errors": [] },
-    "timings": { "navCollisionBuildMs": 1.53, "worldGenerationMs": 7.2 }
+    "timings": { "navCollisionBuildMs": 2.04, "worldGenerationMs": 6.85 }
   },
   "summary": {
     "modules": 11,
@@ -317,6 +317,7 @@
     "rotatedObstacleCount": 9,
     "dynamicObstacleCount": 0,
     "dynamicRotatedObstacleCount": 0,
+    "revision": 0,
     "nodeCount": 11,
     "portalCount": 22,
     "indexedCellCount": 35

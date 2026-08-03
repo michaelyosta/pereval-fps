@@ -1,12 +1,12 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-08-03T07:40:15.560Z",
+  "generatedAt": "2026-08-03T07:59:45.211Z",
   "scenario": { "seed": "high-threat", "weapon": "oblomok-7", "watcher": true },
   "generation": {
     "seed": "high-threat:world-attempt-0",
     "attempts": 1,
     "validation": { "valid": true, "errors": [] },
-    "timings": { "navCollisionBuildMs": 0.17, "worldGenerationMs": 1.44 }
+    "timings": { "navCollisionBuildMs": 0.18, "worldGenerationMs": 1.33 }
   },
   "summary": {
     "modules": 12,
@@ -329,6 +329,7 @@
     "rotatedObstacleCount": 6,
     "dynamicObstacleCount": 0,
     "dynamicRotatedObstacleCount": 0,
+    "revision": 0,
     "nodeCount": 12,
     "portalCount": 24,
     "indexedCellCount": 33
