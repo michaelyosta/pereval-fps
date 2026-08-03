@@ -6,13 +6,24 @@
 //  Контракт GAME (g) — см. main.js. Мир — mods.world.
 // ============================================================
 import * as THREE from 'three';
+import { applyEnemyDamage } from './core/gameplay.js';
+import { isBlockedByWall, rayCapsuleDistance } from './core/ballistics.js';
+import { resolveCapsuleMotion, pointBlockedByCollider } from './core/collision.js';
+import { getEnemyDefinition } from './data/enemies/index.js';
+import { ConnectorAwarePlanner, NavigationAgent } from './expedition/navigation.js';
 
-// --- доступ к миру и звуку (динамический импорт; модули кэшируются, loadMod в main получит тот же инстанс) ---
-let worldMod = { getColliders: () => [], getShootables: () => null };
-try { const m = await import('./world.js'); if (m) worldMod = m; } catch (e) { /* мир не загружен — боты просто патрулируют */ }
-let uiMod = null;
-try { uiMod = await import('./ui.js'); } catch (e) { /* звук недоступен */ }
-const sfx = (n, v) => { if (uiMod && uiMod.sfx) uiMod.sfx(n, v); };
+// Зависимости приходят через g.services, чтобы боевой, мировой и UI-модули не образовывали цикл.
+let gRef = null;
+const getWorld = () => {
+  const legacy = gRef?.services?.world || { getColliders: () => [], getShootables: () => null };
+  const expedition = gRef?.expeditionScene;
+  if (!expedition) return legacy;
+  return {
+    getColliders: () => expedition.colliders ?? [],
+    getShootables: () => expedition.group ?? legacy.getShootables?.() ?? null,
+  };
+};
+const sfx = (n, v) => gRef?.services?.ui?.sfx?.(n, v);
 
 // ============================================================
 //  ОБЩИЕ РЕСУРСЫ (создаются один раз, переиспользуются всеми ботами)
@@ -35,7 +46,9 @@ function makeMarkerTex() {
   ctx.beginPath();
   ctx.moveTo(16, 10); ctx.lineTo(23, 21); ctx.lineTo(9, 21);
   ctx.closePath(); ctx.fill();
-  return new THREE.CanvasTexture(c);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
 }
 
 // ============================================================
@@ -304,9 +317,10 @@ function buildSpawnPoints() {
 
 // точка внутри коллайдера мира?
 function pointBlocked(x, z, margin) {
+  const worldMod = getWorld();
   const cols = worldMod.getColliders ? worldMod.getColliders() : [];
   for (const c of cols) {
-    if (Math.abs(x - c.x) < c.hw + margin && Math.abs(z - c.z) < c.hd + margin) return true;
+    if (pointBlockedByCollider(x, z, margin, c, { bottomY: 0, topY: 1.8, stepHeight: 0.45 })) return true;
   }
   return false;
 }
@@ -327,7 +341,9 @@ function findFree(x, z, margin) {
 
 // круг против AABB — как у игрока в main.js
 function resolveCircle(x, z, r) {
+  const worldMod = getWorld();
   const cols = worldMod.getColliders ? worldMod.getColliders() : [];
+  if (Array.isArray(cols)) return resolveCapsuleMotion(x, z, r, cols, { bottomY: 0, topY: 1.8, stepHeight: 0.45 });
   for (const c of cols) {
     const cx = Math.max(c.x - c.hw, Math.min(x, c.x + c.hw));
     const cz = Math.max(c.z - c.hd, Math.min(z, c.z + c.hd));
@@ -375,12 +391,16 @@ function genPatrolPath(b) {
 // ============================================================
 let bots = [];
 let botsGroup = null;
-let gRef = null;
+let navigationGraph = null;
+let navigationPlanner = null;
+let navigationMesh = null;
 
-function createBot(spawnPos) {
+function createBot(spawnPos, archetype = 'soldier') {
+  const definition = getEnemyDefinition(archetype);
   const bot = {
-    mesh: null, health: 100, alive: true, state: 'patrol',
-    speed: 1.4 + Math.random() * 0.4,
+    mesh: null, health: definition.health, maxHealth: definition.health, alive: true, state: 'patrol',
+    archetype: definition.id, definition, role: definition.role,
+    speed: definition.speed + Math.random() * 0.25,
     fireT: 0.6 + Math.random() * 0.8, burstT: 0, burstLeft: 0,
     strafeDir: Math.random() < 0.5 ? -1 : 1, strafeT: 1.5 + Math.random() * 1.5,
     patrolWp: 0, patrolPath: [], pauseT: 0,
@@ -389,15 +409,52 @@ function createBot(spawnPos) {
     spawn: spawnPos.clone(), yaw: Math.random() * Math.PI * 2,
     visT: Math.random() * 0.15, canSee: false,
     moving: false, stuck: false,
-    palette: (Math.random() * PALETTES.length) | 0,
+    watcherActive: definition.role !== 'watcher',
+    palette: definition.palette % PALETTES.length,
     mats: [], parts: {}, muzzleObj: null, headObj: null,
-    aim: 0, recoil: 0
+    aim: 0, recoil: 0,
+    attackT: 0, chargeT: 0,
+    navigationAgent: null,
   };
   const mesh = createBotMesh(bot, bot.palette);
+  mesh.userData.archetype = definition.id;
+  if (definition.role === 'melee' || definition.role === 'watcher') bot.parts.weapon.visible = false;
+  if (definition.role === 'watcher') mesh.visible = false;
   mesh.position.copy(spawnPos);
   bot.patrolPath = genPatrolPath(bot);
   botsGroup.add(mesh);
   return bot;
+}
+
+function spawnEnemyGroup(g, enemyGroup, maxCount = enemyGroup.count) {
+  const spawned = [];
+  const count = Math.max(0, Math.min(enemyGroup.count | 0, maxCount | 0));
+  for (let index = 0; index < count; index += 1) {
+    const [x, z] = findFree(
+      enemyGroup.position.x + (index % 2) * 1.1,
+      enemyGroup.position.z + Math.floor(index / 2) * 1.1,
+      0.7,
+    );
+    const spawn = { position: new THREE.Vector3(x, 0, z), nodeId: enemyGroup.nodeId };
+    const bot = createBot(spawn.position, enemyGroup.archetype);
+    bot.id = `runtime-${enemyGroup.id}-${index}-${bots.length}`;
+    bot.expeditionGroupId = enemyGroup.id;
+    bot.expeditionNodeId = enemyGroup.nodeId;
+    bot.expeditionGroupIndex = index;
+    bots.push(bot);
+    spawned.push(bot);
+    if (bot.role === 'watcher') {
+      g.expedition?.watcher?.registerCandidate({
+        id: bot.id,
+        nodeId: enemyGroup.nodeId,
+        position: { x: bot.mesh.position.x, z: bot.mesh.position.z },
+        bot,
+      });
+    } else {
+      g.expedition?.threatDirector?.registerEnemy(bot);
+    }
+  }
+  return spawned;
 }
 
 // ============================================================
@@ -576,16 +633,82 @@ export function init(g) {
   initPickups(g.scene);
   buildSpawnPoints();
   // в обычной игре ботов создаём сразу (в demo это делает main)
-  if (!g.demo) spawnBots(g, 9);
+  if (!g.demo) spawnBots(g, 6);
 }
 
 export function spawnBots(g, n = 8) {
   if (!spawnPoints.length) buildSpawnPoints();
+  for (const pickup of pickups) pickup.mesh?.parent?.remove(pickup.mesh);
+  pickups.length = 0;
   // очистить старых (повторный вызов идемпотентен)
   for (const b of bots) {
     if (b.mesh && b.mesh.parent) b.mesh.parent.remove(b.mesh);
   }
   bots = [];
+  navigationGraph = null;
+  navigationPlanner = null;
+  navigationMesh = null;
+  const expeditionGroups = g.expedition?.run?.map?.enemyGroups;
+  if (expeditionGroups?.length) {
+    const groups = g.expedition.encounterDirector?.claimInitialGroups?.(n, {
+      playerPosition: { x: g.player.pos.x, z: g.player.pos.z },
+    }) ?? expeditionGroups;
+    let remaining = Math.max(1, n | 0);
+    const spawned = [];
+    for (const enemyGroup of groups) {
+      if (remaining <= 0) break;
+      const groupBots = spawnEnemyGroup(g, enemyGroup, Math.min(enemyGroup.count, remaining));
+      if (groupBots.length) {
+        g.expedition.encounterDirector?.markSpawned?.(
+          enemyGroup.id,
+          groupBots.map((bot) => bot.id),
+        );
+        spawned.push(...groupBots);
+        remaining -= groupBots.length;
+      } else {
+        g.expedition.encounterDirector?.markFailed?.(enemyGroup.id, 'initial-spawn-failed');
+      }
+    }
+    return spawned;
+  }
+  const generatedSpawns = g.expedition?.run?.map?.enemyGroups
+    ?.flatMap((enemyGroup) => {
+      const positions = [];
+      for (let index = 0; index < enemyGroup.count; index += 1) {
+        positions.push({
+          position: new THREE.Vector3(
+            enemyGroup.position.x + (index % 2) * 1.1,
+            0,
+            enemyGroup.position.z + Math.floor(index / 2) * 1.1,
+          ),
+          groupId: enemyGroup.id,
+          nodeId: enemyGroup.nodeId,
+          archetype: enemyGroup.archetype,
+        });
+      }
+      return positions;
+    })
+    ?.filter((candidate) => candidate.position.distanceTo(g.player.pos) > 10) ?? [];
+  if (generatedSpawns.length) {
+    for (const spawn of generatedSpawns.slice(0, Math.min(n, 12))) {
+      const bot = createBot(spawn.position, spawn.archetype);
+      bot.id = `runtime-${spawn.groupId}-${bots.length}`;
+      bot.expeditionGroupId = spawn.groupId;
+      bot.archetype = spawn.archetype;
+      bots.push(bot);
+      if (bot.role === 'watcher') {
+        g.expedition?.watcher?.registerCandidate({
+          id: bot.id,
+          nodeId: spawn.nodeId,
+          position: { x: bot.mesh.position.x, z: bot.mesh.position.z },
+          bot,
+        });
+      } else {
+        g.expedition?.threatDirector?.registerEnemy(bot);
+      }
+    }
+    return;
+  }
   const count = Math.max(1, n | 0);
   const used = [];
   for (let i = 0; i < count; i++) {
@@ -595,12 +718,55 @@ export function spawnBots(g, n = 8) {
       if (!used.some(u => u.distanceTo(cand) < 2.5)) { sp = cand; break; }
     }
     used.push(sp.clone());
-    bots.push(createBot(sp));
+    const bot = createBot(sp, 'soldier');
+    bot.id = `runtime-arena-${bots.length}`;
+    bots.push(bot);
   }
+}
+
+export function spawnEncounter(g, encounter) {
+  const enemyGroup = encounter?.group ?? g.expedition?.run?.map?.enemyGroups?.find((group) => group.id === encounter?.groupId);
+  if (!enemyGroup) return { ok: false, reason: 'unknown-group' };
+  if (g.expedition?.encounterDirector?.recordById?.(enemyGroup.id)?.state === 'spawned') {
+    return { ok: false, reason: 'already-spawned', groupId: enemyGroup.id };
+  }
+  const groupBots = spawnEnemyGroup(g, enemyGroup);
+  if (!groupBots.length) return { ok: false, reason: 'spawn-failed', groupId: enemyGroup.id };
+  g.expedition?.encounterDirector?.markSpawned?.(
+    enemyGroup.id,
+    groupBots.map((bot) => bot.id),
+  );
+  g.events?.emit('encounter:spawned', {
+    encounter,
+    groupId: enemyGroup.id,
+    botIds: groupBots.map((bot) => bot.id),
+    count: groupBots.length,
+  });
+  return { ok: true, groupId: enemyGroup.id, botIds: groupBots.map((bot) => bot.id) };
 }
 
 export function getGroup() { return botsGroup; }
 export function getBots() { return bots; }
+
+export function activateWatcher(g, candidateId) {
+  const bot = bots.find((candidate) => candidate.id === candidateId && candidate.role === 'watcher');
+  if (!bot) return false;
+  bot.watcherActive = true;
+  bot.mesh.visible = true;
+  bot.state = 'patrol';
+  g.expedition?.threatDirector?.registerEnemy(bot);
+  return true;
+}
+
+function getNavigationPlanner(g) {
+  const graph = g.expedition?.run?.map?.graph ?? null;
+  if (graph !== navigationGraph) {
+    navigationGraph = graph;
+    navigationPlanner = graph ? new ConnectorAwarePlanner(graph) : null;
+    navigationMesh = g.expedition?.run?.map?.navigationMesh ?? null;
+  }
+  return navigationPlanner;
+}
 
 // ============================================================
 //  ВРЕМЕННЫЕ ОБЪЕКТЫ (один набор на модуль, без new в update)
@@ -637,6 +803,7 @@ function moveBot(b, vx, vz, dt) {
 
 // прямая видимость: рейкаст от головы к глазам игрока через статику мира
 function hasLOS(b, ppos) {
+  const worldMod = getWorld();
   const shootables = worldMod.getShootables ? worldMod.getShootables() : null;
   b.headObj.getWorldPosition(_v1);
   _v2.subVectors(ppos, _v1);
@@ -651,6 +818,7 @@ function hasLOS(b, ppos) {
 
 function updatePatrol(b, dt) {
   if (b.pauseT > 0) { b.pauseT -= dt; b.moving = false; return; }
+  if (gRef?.expedition && updateNavigationPatrol(b, dt)) return;
   const path = b.patrolPath;
   if (!path.length) { b.moving = false; return; }
   const wp = path[b.patrolWp % path.length];
@@ -674,7 +842,158 @@ function updatePatrol(b, dt) {
   }
 }
 
+function updateNavigationPatrol(b, dt) {
+  const manager = gRef?.expedition;
+  const planner = getNavigationPlanner(gRef);
+  if (!manager?.run || !planner) return false;
+  const playerNodeId = manager.nodeForPosition({ x: gRef.player.pos.x, z: gRef.player.pos.z });
+  const currentNodeId = manager.nodeForPosition({ x: b.mesh.position.x, z: b.mesh.position.z }) ?? b.expeditionNodeId;
+  if (!playerNodeId || !currentNodeId) {
+    b.navigationAgent = null;
+    return false;
+  }
+  if (!b.navigationAgent) b.navigationAgent = new NavigationAgent(planner, navigationMesh);
+
+  if (playerNodeId === currentNodeId) {
+    const waypoint = b.navigationAgent.localWaypoint(
+      currentNodeId,
+      { x: b.mesh.position.x, z: b.mesh.position.z },
+      { x: gRef.player.pos.x, z: gRef.player.pos.z },
+      0.85,
+    );
+    if (!waypoint) {
+      b.moving = false;
+      return true;
+    }
+    _v1.set(waypoint.x - b.mesh.position.x, 0, waypoint.z - b.mesh.position.z);
+    const distance = _v1.length();
+    if (distance <= 0.05) {
+      b.moving = false;
+      return true;
+    }
+    _v1.multiplyScalar(1 / distance);
+    turnToward(b, Math.atan2(_v1.x, _v1.z), 5, dt);
+    const ok = moveBot(b, _v1.x * b.speed, _v1.z * b.speed, dt);
+    b.moving = ok;
+    if (!ok) b.navigationAgent = null;
+    return true;
+  }
+
+  b.navigationAgent.setTarget(currentNodeId, playerNodeId);
+  const waypoint = b.navigationAgent.waypoint(
+    currentNodeId,
+    { x: b.mesh.position.x, z: b.mesh.position.z },
+    0.85,
+  );
+  if (!waypoint) {
+    b.navigationAgent = null;
+    return false;
+  }
+  _v1.set(waypoint.x - b.mesh.position.x, 0, waypoint.z - b.mesh.position.z);
+  const distance = _v1.length();
+  if (distance <= 0.05) {
+    b.moving = false;
+    return true;
+  }
+  _v1.multiplyScalar(1 / distance);
+  turnToward(b, Math.atan2(_v1.x, _v1.z), 5, dt);
+  const ok = moveBot(b, _v1.x * b.speed, _v1.z * b.speed, dt);
+  b.moving = ok;
+  if (!ok) b.navigationAgent = null;
+  return true;
+}
+
+function updateStalkerAttack(b, dt, ppos, dist) {
+  _v1.subVectors(ppos, b.mesh.position);
+  _v1.y = 0;
+  if (dist > 0.01) _v1.normalize();
+  turnToward(b, Math.atan2(_v1.x, _v1.z), 10, dt);
+  b.attackT = Math.max(0, b.attackT - dt);
+  if (dist > b.definition.attackRange) {
+    b.moving = moveBot(b, _v1.x * b.speed, _v1.z * b.speed, dt);
+    return;
+  }
+  b.moving = false;
+  if (b.attackT <= 0 && hasLOS(b, ppos)) {
+    b.attackT = 1.15;
+    gRef?.damagePlayer?.(b.definition.damage, { type: 'stalker', enemy: b });
+    sfx('hurt', 0.18);
+  }
+}
+
+function updateWatcherAttack(b, dt, ppos, dist) {
+  _v1.subVectors(ppos, b.mesh.position);
+  _v1.y = 0;
+  if (dist > 0.01) _v1.normalize();
+  turnToward(b, Math.atan2(_v1.x, _v1.z), 12, dt);
+  b.attackT = Math.max(0, b.attackT - dt);
+  if (dist > b.definition.attackRange) {
+    b.moving = moveBot(b, _v1.x * b.speed, _v1.z * b.speed, dt);
+    return;
+  }
+  b.moving = false;
+  if (b.attackT <= 0 && hasLOS(b, ppos)) {
+    b.attackT = 1.6;
+    gRef?.damagePlayer?.(b.definition.damage, { type: 'watcher', enemy: b });
+    sfx('hurt', 0.26);
+  }
+}
+
+function fireAnomalyShot(b, ppos, dist) {
+  b.muzzleObj.getWorldPosition(_v1);
+  _v2.copy(ppos).sub(_v1);
+  if (!_v2.lengthSq()) return;
+  _v2.normalize();
+  const worldMod = getWorld();
+  let wallDistance = Infinity;
+  if (worldMod.getShootables) {
+    _ray.set(_v1, _v2);
+    const wallHits = _ray.intersectObjects([worldMod.getShootables()], true);
+    if (wallHits.length) wallDistance = wallHits[0].distance;
+  }
+  const playerHitDistance = rayCapsuleDistance(
+    _v1,
+    _v2,
+    { x: ppos.x, z: ppos.z, bottomY: ppos.y - 1.4, topY: ppos.y + 0.08, radius: 0.38 },
+    Math.min(dist + 2, b.definition.attackRange),
+  );
+  const blocked = isBlockedByWall(wallDistance, playerHitDistance);
+  spawnTracer(_v1, _v2, Math.min(b.definition.attackRange, wallDistance));
+  spawnMuzzle(_v1);
+  sfx('shotHit', 0.12);
+  if (Number.isFinite(playerHitDistance) && !blocked)
+    gRef?.damagePlayer?.(b.definition.damage, { type: 'anomaly', enemy: b });
+}
+
+function updateAnomalyAttack(b, dt, ppos, dist) {
+  _v1.subVectors(ppos, b.mesh.position);
+  _v1.y = 0;
+  if (dist > 0.01) _v1.normalize();
+  turnToward(b, Math.atan2(_v1.x, _v1.z), 4, dt);
+  b.attackT = Math.max(0, b.attackT - dt);
+  if (b.chargeT > 0) {
+    b.chargeT -= dt;
+    b.moving = false;
+    if (b.chargeT <= 0) fireAnomalyShot(b, ppos, dist);
+    return;
+  }
+  if (dist < 16) {
+    b.moving = moveBot(b, -_v1.x * b.speed, -_v1.z * b.speed, dt);
+  } else if (dist > 26) {
+    b.moving = moveBot(b, _v1.x * b.speed, _v1.z * b.speed, dt);
+  } else {
+    b.moving = false;
+  }
+  if (b.attackT <= 0 && dist <= b.definition.attackRange && hasLOS(b, ppos)) {
+    b.attackT = 3.2;
+    b.chargeT = b.definition.chargeSeconds;
+  }
+}
+
 function updateAttack(b, dt, ppos, dist) {
+  if (b.role === 'watcher') return updateWatcherAttack(b, dt, ppos, dist);
+  if (b.role === 'melee') return updateStalkerAttack(b, dt, ppos, dist);
+  if (b.role === 'telegraph-ranged') return updateAnomalyAttack(b, dt, ppos, dist);
   _v1.subVectors(ppos, b.mesh.position); _v1.y = 0;
   _v1.normalize();
   turnToward(b, Math.atan2(_v1.x, _v1.z), 7, dt);
@@ -734,21 +1053,35 @@ function fireShot(b, ppos, dist) {
   );
   _v3.subVectors(_v2, _v1).normalize();
 
-  spawnTracer(_v1, _v3, Math.min(dist + 2, 40));
+  const worldMod = getWorld();
+  let wallDistance = Infinity;
+  if (worldMod.getShootables) {
+    _ray.set(_v1, _v3);
+    const wallHits = _ray.intersectObjects([worldMod.getShootables()], true);
+    if (wallHits.length) wallDistance = wallHits[0].distance;
+  }
+  const targetDistance = Math.min(dist + 2, 40);
+  const playerHitDistance = rayCapsuleDistance(
+    _v1,
+    _v3,
+    { x: ppos.x, z: ppos.z, bottomY: ppos.y - 1.4, topY: ppos.y + 0.08, radius: 0.38 },
+    targetDistance
+  );
+  spawnTracer(_v1, _v3, Math.min(targetDistance, wallDistance));
   spawnMuzzle(_v1);
   sfx('shoot', 0.1); // дальний выстрел — тише
 
-  // попадание: если статика ближе игрока — заслон
-  let hitPlayer = true;
-  const shootables = worldMod.getShootables ? worldMod.getShootables() : null;
-  if (shootables) {
-    _ray.set(_v1, _v3);
-    const hits = _ray.intersectObjects([shootables], true);
-    if (hits.length && hits[0].distance < dist - 0.3) hitPlayer = false;
-  }
+  // Попадание требует пересечения с капсулой игрока и отсутствия ближайшей стены.
+  const movementPenalty = Math.min(0.22, (gRef?.player.moveSpeed || 0) * 0.025);
+  const distancePenalty = Math.min(0.24, dist * 0.006);
+  const burstPenalty = Math.min(0.18, Math.max(0, 4 - b.burstLeft) * 0.035);
+  const chance = Math.max(0.08, 0.42 - movementPenalty - distancePenalty - burstPenalty);
+  const hitPlayer = Number.isFinite(playerHitDistance)
+    && !isBlockedByWall(wallDistance, playerHitDistance)
+    && Math.random() < chance;
   if (hitPlayer) {
     const dmg = Math.max(5, Math.min(12, Math.round(12.5 - dist * 0.11))); // меньше в дальнем
-    if (gRef && gRef.events && gRef.events.onPlayerDamage) gRef.events.onPlayerDamage(dmg);
+    gRef?.damagePlayer?.(dmg, { type: 'enemy', enemy: b });
     sfx('shotHit', 0.3);
   }
 }
@@ -756,10 +1089,13 @@ function fireShot(b, ppos, dist) {
 // ============================================================
 //  СМЕРТЬ / ВОСКРЕШЕНИЕ
 // ============================================================
-export function applyDamage(g, bot, dmg, dir, point) {
+export function applyDamage(g, bot, dmg, dir, point, meta = {}) {
   if (!bot || !bot.alive) return { killed: false };
-  bot.health -= dmg;
   bot.hitFlash = 1;
+  const result = applyEnemyDamage(g.state, bot, dmg, (event) => {
+    g.events?.emit('enemy:damaged', { bot, ...event, ...meta });
+  });
+  if (meta.debug) g.events?.emit('enemy:hit', { bot, archetype: bot.archetype, ...result, ...meta });
 
   // кровь в точке попадания
   const p = point || bot.mesh.position;
@@ -774,17 +1110,17 @@ export function applyDamage(g, bot, dmg, dir, point) {
     bot.mesh.position.x = rx; bot.mesh.position.z = rz;
   }
 
-  if (bot.health <= 0) {
-    bot.alive = false;
+  if (result.killed) {
+    g.expedition?.threatDirector?.removeEnemy(bot.id);
     bot.state = 'dead';
     bot.deadT = 0; bot.fadeT = 0;
-    bot.respawnT = 7.0;
+    bot.respawnT = gRef?.expedition ? Infinity : 7.0;
     bot.moving = false;
     bot.burstLeft = 0;
     dropPickup(g, bot.mesh.position);   // враг роняет подсумки с патронами
-    return { killed: true };
+    return { ...result, ...meta, killed: true };
   }
-  return { killed: false };
+  return { ...result, ...meta, killed: false };
 }
 
 function setOpacity(b, op) {
@@ -796,7 +1132,7 @@ function respawnBot(b) {
   b.mesh.rotation.set(0, b.yaw, 0);
   b.mesh.visible = true;
   setOpacity(b, 1);
-  b.health = 100; b.alive = true; b.state = 'patrol';
+  b.health = b.maxHealth ?? b.definition?.health ?? 100; b.alive = true; b.state = 'patrol';
   b.hitFlash = 0; b.flashOn = false;
   b.deadT = 0; b.fadeT = 0; b.respawnT = 0;
   b.pauseT = 0.4 + Math.random() * 0.8;
@@ -935,6 +1271,35 @@ function updateFlash(b, dt) {
   }
 }
 
+function separateBots() {
+  const minDistance = 0.7;
+  const minDistanceSquared = minDistance * minDistance;
+  for (let i = 0; i < bots.length; i += 1) {
+    const a = bots[i];
+    if (!a.alive || a.state === 'dead') continue;
+    for (let j = i + 1; j < bots.length; j += 1) {
+      const b = bots[j];
+      if (!b.alive || b.state === 'dead') continue;
+      let dx = b.mesh.position.x - a.mesh.position.x;
+      let dz = b.mesh.position.z - a.mesh.position.z;
+      const distanceSquared = dx * dx + dz * dz;
+      if (distanceSquared >= minDistanceSquared) continue;
+      if (distanceSquared < 1e-6) { dx = 1; dz = 0; }
+      else {
+        const distance = Math.sqrt(distanceSquared);
+        dx /= distance;
+        dz /= distance;
+      }
+      const distance = Math.sqrt(Math.max(distanceSquared, 1e-6));
+      const push = (minDistance - distance) * 0.5;
+      const aPos = resolveCircle(a.mesh.position.x - dx * push, a.mesh.position.z - dz * push, 0.35);
+      const bPos = resolveCircle(b.mesh.position.x + dx * push, b.mesh.position.z + dz * push, 0.35);
+      a.mesh.position.x = aPos[0]; a.mesh.position.z = aPos[1];
+      b.mesh.position.x = bPos[0]; b.mesh.position.z = bPos[1];
+    }
+  }
+}
+
 // ============================================================
 //  ГЛАВНЫЙ ЦИКЛ
 // ============================================================
@@ -946,6 +1311,8 @@ export function update(dt, g) {
 
   for (const b of bots) {
     b.mesh.updateMatrixWorld();
+
+    if (b.role === 'watcher' && !b.watcherActive) continue;
 
     if (b.state === 'dead') { updateDead(b, dt); continue; }
 
@@ -966,7 +1333,7 @@ export function update(dt, g) {
     }
 
     if (playerAlive && canSee && dist < 45) {
-      if (b.state !== 'attack') { b.state = 'attack'; b.fireT = 0.4 + Math.random() * 0.5; }
+      if (b.state !== 'attack') { b.state = 'attack'; b.fireT = 1.1 + Math.random() * 0.8; }
       updateAttack(b, dt, ppos, dist);
     } else {
       if (b.state === 'attack') b.state = 'patrol';
@@ -976,4 +1343,5 @@ export function update(dt, g) {
     updateAnim(b, dt);
     updateFlash(b, dt);
   }
+  separateBots();
 }

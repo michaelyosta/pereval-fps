@@ -1,60 +1,122 @@
-# ОПЕРАЦИЯ «ПЕРЕВАЛ» — браузерный FPS на Three.js
+# Operation “Pereval”
 
-Тактический шутер от первого лица в браузере, построенный на **Three.js** без единого внешнего ассета: вся геометрия — примитивы, все текстуры — процедурные canvas-текстуры, звук — WebAudio.
+`Pereval` is a browser FPS prototype built with Three.js. It keeps the original visual brief: a fortified desert outpost at golden hour and the anomalous rifle “OBLOMOK-7”. The playable map, weapon, bots, particles, and WebAudio are local and procedural; there are no remote runtime assets.
 
-Арт-направление: военная база в пустыне, тёплый «золотой час». В центре сюжета — аномальное оружие **«ОБЛОМОК-7»**: разрушенный артефакт с обугленными пятнами, пульсирующей теал-трещиной и парящими осколками.
+The project is now a local Vite application with explicit gameplay services, a repeatable survival/extraction expedition loop, unit tests, Playwright coverage, a deterministic demo route, debug telemetry, quality presets, and a measured benchmark.
 
-> Проект создан в итеративном цикле с визуальным критиком: 6 раундов «критика → правки», оценка выросла с 2.5 до 7.3/10 по шкале «уровень Call of Duty» (сравнение с реальными скриншотами CoD).
+## Preview
 
-## Как запустить
+- [Start screen](docs/qa/iteration-01/start.png)
+- [Combat HUD](docs/qa/iteration-01/combat.png)
+- [Demo scene](docs/qa/final/demo.png)
+- [OBLOMOK-7 concept reference](assets/concepts/oblomok-7-concept.png)
+
+## Run locally
 
 ```bash
-cd fps-cod
-python -m http.server 8765
+npm install
+npm run dev
 ```
 
-Открой **http://127.0.0.1:8765/** (не localhost — возможен конфликт IPv6).
+Open `http://127.0.0.1:5173/`.
 
-Демо-режим (автооблёт камеры + автострельба): `http://127.0.0.1:8765/?demo=1`
+Useful routes:
 
-## Управление
+- `/?mode=expedition&seed=12345` — seeded expedition (the default mode).
+- `/?mode=arena` — preserved five-kill legacy arena for combat regression.
+- `/?mode=arena&demo=1` — cinematic camera and safe presentation scene.
+- `/?debug=1` — compact FPS, frame time, renderer counters, weapon, spread, recoil, and player position overlay.
+- `/?mode=expedition&seed=12345&testMode=1` — accelerated deterministic QA lifecycle.
+- `/?quality=Low|Medium|High|Ultra` — select a render preset without changing gameplay.
 
-| Клавиша | Действие |
-|---|---|
-| WASD | движение |
-| Shift | бег (оружие опускается; можно стрелять на бегу) |
-| ЛКМ | огонь |
-| ПКМ | прицел (ADS) |
-| R | перезарядка |
-| Пробел | прыжок |
-| ЛКМ по баннеру | старт игры |
+Production checks:
 
-## Особенности
-
-- **Оружие «ОБЛОМОК-7»**: ~55 мешей (винтовка + руки в перчатках с пальцами на спусковом крючке), анимация отдачи, спринт-поза, прицеливание с прицелами на оси камеры, аномалия (пульс ядра, искры, парящие осколки)
-- **Враги с ИИ**: патруль/атака/смерть/респаун, рейкасты видимости, очереди, руки держат винтовку, стрельба из дула, отдача, красные маркеры над головами (видны сквозь стены)
-- **Экономика патронов по CoD-модели**: убитые враги роняют подсумки
-- **Окружение**: база ~70×50 м, процедурные PBR-текстуры (bump/roughness), мягкие тени 4K, SSAO, PMREM-окружение, светящиеся окна, фонари, пыль, 3 слоя облаков + billboard-облака, силуэты на горизонте
-- **Пост-обработка**: bloom, кинематографичное зерно, виньетка, тёплая цветокоррекция
-- **Технически**: пулы объектов без аллокаций в цикле, ленивая загрузка модулей, 0 ошибок консоли
-
-## Структура
-
-```
-index.html          — главная страница
-src/main.js         — ядро: цикл, ввод, физика игрока, пост-обработка, демо-режиссёр
-src/world.js        — окружение: база, свет, земля, небо, облака, декор
-src/combat.js       — оружие «ОБЛОМОК-7», стрельба, FX-пулы, аномалия
-src/bots.js         — ИИ врагов, анимации, подсумки с патронами
-src/ui.js           — HUD + процедурный звук (WebAudio)
+```bash
+npm run build
+npm run preview
 ```
 
-## Технологии
+## Controls
 
-- Three.js r160 (ES-модули, importmap)
-- Никаких внешних ассетов: примитивы + canvas-текстуры + WebAudio
-- UnrealBloomPass, PMREMGenerator, PCFSoftShadowMap
+| Input       | Action          |
+| ----------- | --------------- |
+| WASD        | Move            |
+| Shift       | Sprint          |
+| Left mouse  | Fire            |
+| Right mouse | Aim down sights |
+| R           | Reload          |
+| Space       | Jump            |
+| E           | Interact        |
+| H           | Heal            |
+| M           | Visited map     |
+| Escape      | Pause / resume  |
 
-## Лицензия
+If Pointer Lock is unavailable, the game falls back to a normal mouse mode instead of leaving the match in a broken state. Pause freezes match time, AI, weapon timers, and death/respawn progression.
 
-MIT
+## Gameplay contracts
+
+- Player damage is authoritative in the gameplay core and emits one event per applied hit.
+- Enemy kills transition once from alive to dead and increment the match counter once.
+- Enemy shots use a vertical capsule player hit volume, line-of-sight, nearest-wall blocking, movement/distance penalties, and burst timing.
+- Player shots validate the muzzle-to-impact segment so the weapon cannot shoot through nearby cover.
+- Player and bot movement share height-aware capsule collision with oriented world boxes and a small step offset.
+- Arena ends after five kills; expedition kills are statistics and do not end a run. Expedition success requires objective completion and a completed extraction.
+- Expedition module walls are generated from graph edges and feed player collision, bot movement/LOS, and player-shot blocking; legacy arena keeps its original world path.
+
+## Architecture
+
+```text
+src/main.js             composition root, input, loop, camera, pause/victory
+src/world.js            procedural base, lighting, renderable/shootable world
+src/combat.js            OBLOMOK-7, fire/reload, recoil, ballistics and FX
+src/bots.js              patrol/attack/death/respawn and enemy hit handling
+src/ui.js                HUD, killfeed, damage feedback, WebAudio
+src/core/EventBus.js     small synchronous event bus
+src/core/gameplay.js     pure health, kill, reload, respawn, and time rules
+src/core/ballistics.js   capsule ray tests and wall blocking
+src/core/collision.js    height-aware oriented-box capsule resolver
+src/config/graphics.js   Low/Medium/High/Ultra render presets
+src/core/expedition/     seeded RNG, run lifecycle, campaign contracts
+src/expedition/          authored modules, connector routes, encounters, objectives, extraction, inventory, noise, threat, Watcher
+```
+
+Modules receive the shared service object through `g.services`; there is no `window.g`, dynamic import cycle, or UI callback overwrite.
+
+## Tests and QA
+
+```bash
+npm test                 # gameplay, ballistics, capsule collision, expedition services
+npm run lint
+npm run format:check
+npm run test:e2e         # lifecycle, seed passes, encounter spawn, balance profile, combat, pause, demo
+npm run qa:seeds         # exports eight deterministic seed graph schemas
+npm run benchmark        # writes docs/qa/final/benchmark.json and expedition-benchmark.png
+```
+
+The benchmark reports actual values from the current machine. The checked-in run uses the seeded expedition runtime (`seed=benchmark`, normal mode) in headless Chromium without assuming a discrete GPU: 7.29 FPS, 137.24 ms sampled frame time, 92 draw calls, 1,703 triangles, 51 resources, 3.50 MB encoded resource bytes, 96 geometries, and 21 textures. The run telemetry also records 3.70 ms world generation, 0.80 ms nav/collision build, 5.30 ms reset, 0.30 ms collider build, 1.50 ms module assembly, and 4.70 ms total world assembly. The in-app visual QA overlay is a separate measurement; neither environment is presented as a universal hardware claim.
+
+The expedition entry now emits a 647.61 kB main JavaScript chunk (170.99 kB gzip); combat, bots, UI, and legacy arena runtime code are separate lazy chunks (`20.60/7.64`, `28.67/10.40`, `10.38/3.95`, and `25.33/8.04` kB minified/gzip respectively). Floors, static wall/obstacle boxes, and module frames use renderer batching; remaining transfer and draw-call costs are known optimization targets, not hidden behind a made-up budget.
+
+`npm audit --omit=dev --audit-level=high` is clean. The full development-tool audit currently reports five transitive Vite/Vitest/esbuild advisories; the available `npm audit fix --force` is a breaking upgrade, so it is intentionally not applied in this gameplay pass.
+
+## Assets
+
+The runtime uses local CanvasTexture materials. Color maps are tagged `THREE.SRGBColorSpace`; bump/roughness data maps use `THREE.NoColorSpace`. The generated Image Gen image in `assets/concepts/` is a concept reference only and is not loaded by the game. See [assets/README.md](assets/README.md) and [assets/manifest.json](assets/manifest.json).
+
+## Scope and limitations
+
+The expedition foundation is a compact vertical slice rather than a production multiplayer/AAA stack. There is no networking, content streaming, skeletal animation pipeline, baked lightmap, or external PBR asset library. The authored expedition graph, connector-aware routes, module-local polygon navmesh with rotated authored boxes, runtime dynamic OBB registration, event-driven armory/blocked-route barriers, objective data, extraction points, loot placements, events, finite encounter groups, selected loadout, and skill rewards are deterministic by seed; bots can use local visibility paths inside a module as well as connector routes; the hideout persists campaign stash, unlocks, best time, and bounded run history through `SaveSystem`, while temporary run skills are discarded on death. Broader event choreography, arbitrary non-box geometry, fully general long-range polygon following, and draw-call-heavy decoration profiling remain known optimization targets; runtime code is now split into dedicated lazy chunks, with further transfer tuning still possible. Legacy arena decoration is a separate lazy-loaded compatibility path. Headless browser performance is software-dependent; use the in-app debug overlay or a real browser on the target GPU for hardware decisions.
+
+See [EXPEDITION_AUDIT.md](docs/design/EXPEDITION_AUDIT.md) for the original defect inventory and [docs/qa/final/REPORT.md](docs/qa/final/REPORT.md) for the final verification record.
+
+## Expedition foundation
+
+The expedition route owns a single `RunManager` state machine:
+
+`Boot → MainMenu → Hideout → Loadout → GeneratingRun → Deploying → Exploration → ObjectiveActive → ExtractionAvailable → Extracting → Results`.
+
+`?seed=` is preserved in the `RunConfig`, generated graph and connector routes, objective, extraction points, loot containers, events, enemy groups, encounter scheduler, temporary skill rewards, debug overlay, and results data. `?mode=arena` remains the explicit legacy regression route. Threat/Anomaly pressure can schedule safe dormant enemy groups mid-run; expedition kills do not respawn. Temporary skills are run-scoped; campaign unlocks, stash, and recent run history are versioned through `SaveSystem`.
+
+## License
+
+MIT. See [LICENSE](LICENSE).

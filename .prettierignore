@@ -1,0 +1,7 @@
+# Legacy renderer modules predate the formatter and are intentionally kept structurally stable.
+index.html
+src/main.js
+src/world.js
+src/combat.js
+src/bots.js
+src/ui.js

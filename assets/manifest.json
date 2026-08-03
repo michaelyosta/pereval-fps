@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "runtime": {
+    "mode": "procedural-local",
+    "remoteAssets": false,
+    "conceptReference": "assets/concepts/oblomok-7-concept.png"
+  },
+  "plannedPbrSlots": [
+    { "name": "baseColor", "colorSpace": "SRGBColorSpace" },
+    { "name": "normal", "colorSpace": "NoColorSpace" },
+    { "name": "roughness", "colorSpace": "NoColorSpace" },
+    { "name": "metalness", "colorSpace": "NoColorSpace" },
+    { "name": "ao", "colorSpace": "NoColorSpace" }
+  ]
+}
